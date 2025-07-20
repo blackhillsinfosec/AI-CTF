@@ -1,0 +1,40 @@
+FROM python:3.11-slim
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    gettext-base \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip install --no-cache-dir \
+    requests \
+    pydantic \
+    llm-guard
+
+# Set working directory
+WORKDIR /app
+
+# Create the setup script
+RUN cat > /usr/local/bin/run_setup.sh << 'EOF'
+#!/bin/bash
+set -e
+echo "Running CTF setup script..."
+cd /app
+echo "Substituting environment variables in config..."
+envsubst < ctf_config_template.json > ctf_config.json
+echo "Starting setup..."
+python3 setup.py -c ctf_config.json
+if [ $? -eq 0 ]; then
+    echo "Setup completed successfully!"
+else
+    echo "Setup failed!"
+    exit 1
+fi
+EOF
+
+# Make it executable
+RUN chmod +x /usr/local/bin/run_setup.sh
+
+# Default command
+CMD ["/usr/local/bin/run_setup.sh"]

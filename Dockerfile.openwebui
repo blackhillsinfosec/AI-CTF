@@ -1,0 +1,53 @@
+FROM ghcr.io/open-webui/open-webui:main
+
+# Create CTF flag in the data directory
+# This will be in the container's filesystem, but the volume mount will override it
+# So we need to handle this differently - we'll create an init script
+
+RUN mkdir -p /docker-entrypoint-init.d
+
+RUN cat > /docker-entrypoint-init.d/01-create-ctf-flag.sh << 'EOF'
+#!/bin/bash
+# This script runs on container startup to ensure the CTF flag exists
+
+CTF_DIR="/app/backend/data/ctf"
+FLAG_FILE="$CTF_DIR/flag.txt"
+
+# Create CTF directory if it doesn't exist
+if [ ! -d "$CTF_DIR" ]; then
+    mkdir -p "$CTF_DIR"
+    echo "Created CTF directory: $CTF_DIR"
+fi
+
+# Create flag file if it doesn't exist
+if [ ! -f "$FLAG_FILE" ]; then
+    echo "{flag:${CTF_FLAG_CHALLENGE_7}}" > "$FLAG_FILE"
+    chmod 644 "$FLAG_FILE"
+    echo "Created CTF flag at: $FLAG_FILE"
+else
+    echo "CTF flag already exists at: $FLAG_FILE"
+fi
+EOF
+
+RUN chmod +x /docker-entrypoint-init.d/01-create-ctf-flag.sh
+
+# Create a custom entrypoint that runs our init scripts
+RUN cat > /custom-entrypoint.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Run all init scripts
+for script in /docker-entrypoint-init.d/*.sh; do
+    if [ -f "$script" ] && [ -x "$script" ]; then
+        echo "Running init script: $script"
+        "$script"
+    fi
+done
+
+# Execute the original entrypoint
+exec /app/backend/start.sh "$@"
+EOF
+
+RUN chmod +x /custom-entrypoint.sh
+
+ENTRYPOINT ["/custom-entrypoint.sh"]

@@ -1,0 +1,37 @@
+FROM jupyter/tensorflow-notebook:latest
+
+# Switch to root to create files
+USER root
+
+# Create startup script to ensure flag in work directory (which is a volume)
+RUN mkdir -p /usr/local/bin && \
+    cat > /usr/local/bin/startup-hook.sh << 'EOF'
+#!/bin/bash
+# Ensure flag exists in the work directory (volume mount)
+if [ ! -f /home/jovyan/work/flag.txt ]; then
+    echo "{flag:${CTF_FLAG_CHALLENGE_6}}" > /home/jovyan/work/flag.txt
+    chmod 644 /home/jovyan/work/flag.txt
+    chown root:root /home/jovyan/work/flag.txt
+    echo "Created CTF flag in work directory"
+fi
+
+# Also create flag in home directory
+if [ ! -f /home/jovyan/flag.txt ]; then
+    echo "{flag:${CTF_FLAG_CHALLENGE_6}}" > /home/jovyan/flag.txt
+    chmod 644 /home/jovyan/flag.txt
+    chown root:root /home/jovyan/flag.txt
+    echo "Created CTF flag in home directory"
+fi
+
+# Execute the original command
+exec "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/startup-hook.sh
+
+# Switch back to jovyan user
+USER jovyan
+
+# Use our startup hook as the entrypoint
+ENTRYPOINT ["/usr/local/bin/startup-hook.sh"]
+CMD ["start-notebook.sh"]

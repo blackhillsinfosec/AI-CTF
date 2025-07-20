@@ -1,0 +1,110 @@
+services:
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: ollama
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      - OLLAMA_DEBUG=1
+    restart: unless-stopped
+
+  open-webui:
+    build:
+      context: .
+      dockerfile: Dockerfile.openwebui
+    container_name: open-webui
+    volumes:
+      - open-webui:/app/backend/data
+    ports:
+      - "${OPENWEBUI_PORT:-4242}:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=
+      - ENABLE_RAG_WEB_SEARCH=false
+      - ENABLE_SIGNUP=true
+      - DEFAULT_USER_ROLE=user
+      - ENABLE_ADMIN_EXPORT=true
+      - ENABLE_COMMUNITY_SHARING=false
+      - ENABLE_API_KEY=true
+      - ENABLE_MESSAGE_RATING=false
+      - CTF_FLAG_CHALLENGE_7=${CTF_FLAG_CHALLENGE_7}  # Added this line
+    restart: unless-stopped
+    depends_on:
+      - ollama
+      - pipelines
+
+  pipelines:
+    image: ghcr.io/open-webui/pipelines:main
+    container_name: pipelines
+    volumes:
+      - pipelines:/app/pipelines
+    ports:
+      - "${PIPELINES_PORT:-9099}:9099"
+    environment:
+      - PIPELINES_ENV=production
+    restart: unless-stopped
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    container_name: jupyter
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-AntiSyphonBlackHillsTrainingFtw!}
+      - CTF_FLAG_CHALLENGE_6=${CTF_FLAG_CHALLENGE_6}
+    volumes:
+      - jupyter-work:/home/jovyan/work
+    restart: unless-stopped
+    command: start-notebook.sh --NotebookApp.token='${JUPYTER_TOKEN:-AntiSyphonBlackHillsTrainingFtw!}'
+
+  setup:
+    build:
+      context: .
+      dockerfile: Dockerfile.setup
+    container_name: ctf-setup
+    environment:
+      # Copy all environment variables for substitution
+      - CTF_ADMIN_EMAIL=${CTF_ADMIN_EMAIL}
+      - CTF_ADMIN_PASSWORD=${CTF_ADMIN_PASSWORD}
+      - CTF_ADMIN_NAME=${CTF_ADMIN_NAME}
+      - CTF_USER_EMAIL=${CTF_USER_EMAIL}
+      - CTF_USER_PASSWORD=${CTF_USER_PASSWORD}
+      - CTF_USER_NAME=${CTF_USER_NAME}
+      - OPENWEBUI_URL=${OPENWEBUI_URL}
+      - JUPYTER_PORT=${JUPYTER_PORT}
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - PIPELINES_PORT=${PIPELINES_PORT}
+      - CTF_FLAG_CHALLENGE_1=${CTF_FLAG_CHALLENGE_1}
+      - CTF_FLAG_CHALLENGE_2=${CTF_FLAG_CHALLENGE_2}
+      - CTF_FLAG_CHALLENGE_3=${CTF_FLAG_CHALLENGE_3}
+      - CTF_FLAG_CHALLENGE_4=${CTF_FLAG_CHALLENGE_4}
+      - CTF_FLAG_CHALLENGE_5=${CTF_FLAG_CHALLENGE_5}
+    volumes:
+      - ./openwebui/setup.py:/app/setup.py:ro
+      - ./openwebui/ctf_config_template.json:/app/ctf_config_template.json:ro
+      - ./openwebui/functions:/app/functions:ro
+      - ./openwebui/pipelines:/app/pipelines:ro
+      - ./openwebui/tools:/app/tools:ro
+    depends_on:
+      open-webui:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+      jupyter:
+        condition: service_started
+      pipelines:
+        condition: service_started   
+    restart: "no"
+
+volumes:
+  ollama:
+  open-webui:
+  pipelines:
+  jupyter-work:

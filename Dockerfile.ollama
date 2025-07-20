@@ -1,0 +1,32 @@
+FROM ollama/ollama:latest
+
+# Create a startup script that pulls the model after Ollama starts
+RUN mkdir -p /scripts
+COPY <<EOF /scripts/startup.sh
+#!/bin/bash
+
+# Start Ollama in the background
+/bin/ollama serve &
+OLLAMA_PID=$!
+
+# Wait for Ollama to be ready
+echo "Waiting for Ollama to start..."
+sleep 10
+
+# Check if the model already exists
+if ! ollama list | grep -q "llama3.1:8b"; then
+    echo "Pulling llama3.1:8b model..."
+    ollama pull llama3.1:8b
+    echo "Model pull complete!"
+else
+    echo "Model llama3.1:8b already exists, skipping pull."
+fi
+
+# Keep Ollama running in the foreground
+wait $OLLAMA_PID
+EOF
+
+RUN chmod +x /scripts/startup.sh
+
+# Use the startup script as the entrypoint
+ENTRYPOINT ["/scripts/startup.sh"]
