@@ -74,7 +74,7 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
 
 ## 🎯 CTF Challenges
 
-The CTF includes 6 challenges of increasing difficulty:
+The CTF includes 7 challenges of increasing difficulty:
 
 1. **Challenge 1: Hello prompt injection!** - Basic prompt injection
 2. **Challenge 2: System Prompt Protection** - Bypass system prompt protections
