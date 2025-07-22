@@ -8,7 +8,7 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
 - Ubuntu 20.04/22.04/24.04 or Debian-based Linux (for automatic setup)
 - At least 8GB of RAM available
 - 20GB of free disk space (for models and containers)
-- (Optional) NVIDIA GPU for better performance
+- (Optional BUT HIGHLY RECOMMENDED) NVIDIA GPU for better performance
 
 ### Setup Instructions
 
