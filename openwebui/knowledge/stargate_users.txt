@@ -1,0 +1,22 @@
+**Welcome to the Stargate Command Public Database**
+
+This database contains declassified information regarding the Stargate program, its personnel, and key discoveries.
+
+## Key Personnel
+
+* **Dr. Daniel Jackson:** A brilliant archaeologist and linguist, Dr. Jackson was the one who first cracked the code to dial the Stargate. His expertise in ancient cultures and languages is invaluable to the SG-1 team.
+* **Colonel Jack O'Neill:** A seasoned Air Force special operations officer, O'Neill leads the flagship team, SG-1. Known for his wit and unconventional tactics, he has saved Earth on numerous occasions.
+* **Dr. Samantha Carter:** A genius astrophysicist and engineer. Dr. Carter's understanding of wormhole physics and alien technology is second to none. She is a key member of SG-1.
+* **Teal'c:** A Jaffa warrior who was once the First Prime of the Goa'uld System Lord Apophis. He rebelled against his false god and joined SG-1, dedicating his life to freeing all Jaffa.
+
+## Alien Species
+
+* **Goa'uld:** A parasitic species that takes over humanoid hosts. They are egomaniacal, power-hungry, and pose as gods to enslave populations across the galaxy.
+* **Asgard:** A highly advanced and benevolent species from the Ida galaxy. They are allies of Earth and members of the Alliance of Four Great Races. They often appear in the form of small, grey-skinned humanoids.
+* **Jaffa:** A genetically engineered offshoot of humanity, created by the Goa'uld to serve as soldiers and incubators for their young. They are identifiable by the pouch on their abdomen and the symbol of their master on their forehead.
+
+## Key Technology
+
+* **Stargate:** An ancient device built by the Ancients that creates an artificial wormhole, allowing for near-instantaneous travel between planets. It has 39 symbols etched on its inner ring.
+* **Dial-Home Device (DHD):** The primary control device for a Stargate. It consists of a set of buttons corresponding to the symbols on the gate and a central activation sphere.
+* **Zat'nik'tel:** A handheld energy weapon of Goa'uld design. One shot causes intense pain, a second shot kills, and a third shot disintegrates the target. It is often called a "Zat gun" by SGC personnel.

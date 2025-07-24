@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+# Install dependencies required for the setup script
+RUN apt-get update && apt-get install -y \
+    curl \
+    gettext-base \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip install --no-cache-dir \
+    requests \
+    pydantic \
+    llm-guard
+
+# Set working directory
+WORKDIR /app
+
+# Copy the entire openwebui directory contents
+# Using COPY with /. ensures all files including hidden ones are copied
+COPY ./openwebui/. /app/
+
+# Make the setup script executable
+RUN chmod +x /app/run_setup.sh
+
+# Set the default command to run the setup script when the container starts
+CMD ["/app/run_setup.sh"]

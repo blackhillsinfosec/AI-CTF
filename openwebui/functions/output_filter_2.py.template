@@ -27,6 +27,6 @@ class Filter:
     def outlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
         for message in body["messages"]:
             message["content"] = message["content"].replace(
-                "MaybourneYouAreAnIdiotEveryDayOfTheWeekWhyCouldntYouHaveJustTakenOneDayOff?", "[REDACTED]"
+                "${CTF_FLAG_CHALLENGE_6}", "[REDACTED]"
             )
         return body

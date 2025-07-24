@@ -11,7 +11,6 @@ services:
     environment:
       - OLLAMA_DEBUG=1
     restart: unless-stopped
-
   open-webui:
     build:
       context: .
@@ -31,12 +30,11 @@ services:
       - ENABLE_COMMUNITY_SHARING=false
       - ENABLE_API_KEY=true
       - ENABLE_MESSAGE_RATING=false
-      - CTF_FLAG_CHALLENGE_7=${CTF_FLAG_CHALLENGE_7}  # Added this line
+      - CTF_FLAG_CHALLENGE_8=${CTF_FLAG_CHALLENGE_8}  # Added this line
     restart: unless-stopped
     depends_on:
       - ollama
       - pipelines
-
   pipelines:
     image: ghcr.io/open-webui/pipelines:main
     container_name: pipelines
@@ -47,7 +45,6 @@ services:
     environment:
       - PIPELINES_ENV=production
     restart: unless-stopped
-
   jupyter:
     build:
       context: .
@@ -58,16 +55,15 @@ services:
     environment:
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=${JUPYTER_TOKEN:-AntiSyphonBlackHillsTrainingFtw!}
-      - CTF_FLAG_CHALLENGE_6=${CTF_FLAG_CHALLENGE_6}
+      - CTF_FLAG_CHALLENGE_7=${CTF_FLAG_CHALLENGE_7}
     volumes:
       - jupyter-work:/home/jovyan/work
     restart: unless-stopped
     command: start-notebook.sh --NotebookApp.token='${JUPYTER_TOKEN:-AntiSyphonBlackHillsTrainingFtw!}'
-
-  setup:
+  ctf-setup:
     build:
       context: .
-      dockerfile: Dockerfile.setup
+      dockerfile: Dockerfile.ctfsetup
     container_name: ctf-setup
     environment:
       # Copy all environment variables for substitution
@@ -86,12 +82,10 @@ services:
       - CTF_FLAG_CHALLENGE_3=${CTF_FLAG_CHALLENGE_3}
       - CTF_FLAG_CHALLENGE_4=${CTF_FLAG_CHALLENGE_4}
       - CTF_FLAG_CHALLENGE_5=${CTF_FLAG_CHALLENGE_5}
-    volumes:
-      - ./openwebui/setup.py:/app/setup.py:ro
-      - ./openwebui/ctf_config_template.json:/app/ctf_config_template.json:ro
-      - ./openwebui/functions:/app/functions:ro
-      - ./openwebui/pipelines:/app/pipelines:ro
-      - ./openwebui/tools:/app/tools:ro
+      - CTF_FLAG_CHALLENGE_6=${CTF_FLAG_CHALLENGE_6}
+      - CTF_FLAG_CHALLENGE_7=${CTF_FLAG_CHALLENGE_7}
+      - CTF_FLAG_CHALLENGE_8=${CTF_FLAG_CHALLENGE_8}
+      - CTF_FLAG_CHALLENGE_9=${CTF_FLAG_CHALLENGE_9}
     depends_on:
       open-webui:
         condition: service_healthy
@@ -100,9 +94,8 @@ services:
       jupyter:
         condition: service_started
       pipelines:
-        condition: service_started   
+        condition: service_started  
     restart: "no"
-
 volumes:
   ollama:
   open-webui:

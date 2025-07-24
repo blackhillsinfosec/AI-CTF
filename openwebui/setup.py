@@ -13,6 +13,7 @@ from pathlib import Path
 import time
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+import os
 
 class APIClient:
     def __init__(self, base_url):
@@ -35,7 +36,6 @@ class APIClient:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0",
             "Accept": "application/json",
             "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br",
             "Origin": base_url,
             "Connection": "keep-alive"
         })
@@ -47,6 +47,32 @@ class APIClient:
             "authorization": f"Bearer {token}"
         })
         self.session.cookies.set("token", token)
+    
+    def _parse_json_response(self, response, endpoint=""):
+        """Safely parse JSON response, handling various edge cases"""
+        try:
+            return response.json()
+        except json.JSONDecodeError:
+            # For successful status codes with no/invalid JSON body
+            if response.status_code in [200, 201, 204]:
+                # Some endpoints return empty success responses
+                return {"success": True, "status_code": response.status_code}
+            
+            # Log error details for debugging
+            content_type = response.headers.get('content-type', '')
+            content_length = response.headers.get('content-length', 'unknown')
+            
+            error_msg = f"Failed to parse JSON response from {endpoint}"
+            error_msg += f"\n   Status: {response.status_code}"
+            error_msg += f"\n   Content-Type: {content_type}"
+            error_msg += f"\n   Content-Length: {content_length}"
+            
+            # Only show response preview for text content
+            if 'text' in content_type or 'json' in content_type:
+                preview = response.text[:200] if response.text else "(empty)"
+                error_msg += f"\n   Response preview: {preview}"
+            
+            raise ValueError(error_msg)
     
     def post(self, endpoint, json_data=None, files=None, data=None, extra_headers=None):
         """Make a POST request with automatic error handling"""
@@ -64,7 +90,34 @@ class APIClient:
         response = self.session.post(url, json=json_data, files=files, data=data, headers=headers, timeout=30)
         
         # Check for success
-        if response.status_code not in [200, 201]:
+        if response.status_code not in [200, 201, 204]:
+            error_msg = f"API request to {endpoint} failed with status {response.status_code}"
+            try:
+                error_detail = response.json()
+                error_msg += f": {error_detail}"
+            except:
+                # Only show text preview if it's not binary data
+                content_type = response.headers.get('content-type', '')
+                if 'text' in content_type or 'json' in content_type:
+                    error_msg += f": {response.text[:500]}"
+                else:
+                    error_msg += f" (binary response)"
+            raise Exception(error_msg)
+        
+        return response
+    
+    def get(self, endpoint, params=None, extra_headers=None):
+        """Make a GET request with automatic error handling"""
+        url = f"{self.base_url}{endpoint}"
+        headers = {}
+        
+        if extra_headers:
+            headers.update(extra_headers)
+        
+        response = self.session.get(url, params=params, headers=headers, timeout=30)
+        
+        # Check for success
+        if response.status_code not in [200, 201, 204]:
             error_msg = f"API request to {endpoint} failed with status {response.status_code}"
             try:
                 error_detail = response.json()
@@ -324,6 +377,144 @@ def create_tool(client, tool_config):
             return True
         raise
 
+def get_knowledge_list(client):
+    """Get list of existing knowledge bases"""
+    try:
+        response = client.get("/api/v1/knowledge/", extra_headers={"Accept": "application/json"})
+        return response.json()
+    except Exception as e:
+        print(f"   ⚠️  Failed to get knowledge list: {e}")
+        return []
+
+def create_knowledge(client, name, description, access_control=None):
+    """Create a new knowledge base"""
+    data = {
+        'name': name,
+        'description': description,
+        'access_control': access_control
+    }
+    
+    try:
+        response = client.post("/api/v1/knowledge/create", json_data=data,
+                             extra_headers={"Priority": "u=0"})
+        return response.json()
+    except Exception as e:
+        print(f"   ⚠️  Failed to create knowledge base: {e}")
+        return None
+
+def get_knowledge_id(client, name):
+    """Get knowledge ID by name, create if doesn't exist"""
+    knowledge_list = get_knowledge_list(client)
+    
+    # Look for existing knowledge base
+    for knowledge in knowledge_list:
+        if knowledge.get('name') == name:
+            return knowledge.get('id')
+    
+    # Create new knowledge base if not found
+    print(f"   📚 Creating new knowledge base: {name}")
+    response = create_knowledge(client, name=name, description=name)
+    if response and 'id' in response:
+        return response['id']
+    
+    return None
+
+def upload_file(client, file_path):
+    """Upload a file to the system"""
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'file': (os.path.basename(file_path), f, 'application/octet-stream')}
+            
+            # Remove Content-Type and Accept-Encoding headers for multipart upload
+            original_content_type = client.session.headers.get('Content-Type')
+            original_accept_encoding = client.session.headers.get('Accept-Encoding')
+            
+            if 'Content-Type' in client.session.headers:
+                del client.session.headers['Content-Type']
+            if 'Accept-Encoding' in client.session.headers:
+                del client.session.headers['Accept-Encoding']
+            
+            try:
+                response = client.post("/api/v1/files/", files=files,
+                                     extra_headers={"Accept": "application/json", "Priority": "u=0"})
+                
+                # Parse JSON response
+                return client._parse_json_response(response, "/api/v1/files/")
+                    
+            finally:
+                # Restore original headers if they existed
+                if original_content_type:
+                    client.session.headers['Content-Type'] = original_content_type
+                if original_accept_encoding:
+                    client.session.headers['Accept-Encoding'] = original_accept_encoding
+                    
+    except FileNotFoundError:
+        print(f"   ⚠️  File not found: {file_path}")
+        return None
+    except Exception as e:
+        print(f"   ⚠️  Failed to upload file {file_path}: {e}")
+        return None
+
+def add_file_to_knowledge(client, knowledge_id, file_id):
+    """Add an uploaded file to a knowledge base"""
+    data = {'file_id': file_id}
+    
+    try:
+        response = client.post(f"/api/v1/knowledge/{knowledge_id}/file/add", 
+                             json_data=data, extra_headers={"Priority": "u=0"})
+        
+        # Parse JSON response using helper
+        return client._parse_json_response(response, f"/api/v1/knowledge/{knowledge_id}/file/add")
+            
+    except Exception as e:
+        print(f"   ⚠️  Failed to add file to knowledge base: {e}")
+        return None
+
+def create_rag(client, rag_config):
+    """Create RAG knowledge base and upload files"""
+    print(f"\n📚 Creating RAG: {rag_config['name']}")
+    
+    # Get or create knowledge base
+    knowledge_id = get_knowledge_id(client, rag_config['name'])
+    if not knowledge_id:
+        print(f"   ❌ Failed to get/create knowledge base '{rag_config['name']}'")
+        return False
+    
+    print(f"   ✓ Using knowledge base ID: {knowledge_id}")
+    
+    # Upload files
+    files = rag_config.get('files', [])
+    if not files:
+        print("   ℹ️  No files to upload")
+        return True
+    
+    uploaded_count = 0
+    for file_path in files:
+        print(f"   📄 Uploading file: {file_path}")
+        
+        # Upload file
+        upload_response = upload_file(client, file_path)
+        if not upload_response:
+            continue
+        
+        file_id = upload_response.get('id')
+        if not file_id:
+            print(f"   ⚠️  No file ID returned for {file_path}")
+            continue
+        
+        print(f"   ✓ File uploaded with ID: {file_id}")
+        
+        # Add file to knowledge base
+        add_response = add_file_to_knowledge(client, knowledge_id, file_id)
+        if add_response:
+            print(f"   ✓ File added to knowledge base")
+            uploaded_count += 1
+        else:
+            print(f"   ⚠️  Failed to add file to knowledge base")
+    
+    print(f"   📊 Uploaded {uploaded_count}/{len(files)} files to RAG '{rag_config['name']}'")
+    return uploaded_count > 0
+
 def create_model(client, model_config):
     """Create a single model"""
     print(f"\n🤖 Creating model: {model_config['name']}")
@@ -431,6 +622,8 @@ def upload_pipeline(client, pipeline_config):
     }
     
     # Prepare the form data
+    # Note that this logic might need updated to dynamically determine the URL index
+    # if we add more pipelines in the future
     data = {
         'urlIdx': '0'
     }
@@ -457,12 +650,17 @@ def upload_pipeline(client, pipeline_config):
                     try:
                         result = response.json()
                         pipeline_id = result.get('id')
+                        if pipeline_id:
+                            pipeline_config['id'] = pipeline_id  # Update config with actual ID
                     except:
                         pass
                 
                 # Configure pipeline valves if model_ids are specified
+                # This should happen regardless of whether we had an ID originally
                 if pipeline_id and 'model_ids' in pipeline_config:
-                    pipeline_config['id'] = pipeline_id  # Update config with actual ID
+                    # Make sure the config has the ID
+                    if 'id' not in pipeline_config:
+                        pipeline_config['id'] = pipeline_id
                     configure_pipeline_valves(client, pipeline_config)
                 
                 return True
@@ -504,6 +702,78 @@ def configure_pipeline_valves(client, pipeline_config):
     print(f"   ✓ Pipeline tied to models: {', '.join(pipeline_config['model_ids'])}")
 
 
+def associate_knowledge_with_models(client, config):
+    """Associate knowledge bases with models that need them"""
+    
+    # Get list of all knowledge bases
+    knowledge_list = get_knowledge_list(client)
+    knowledge_map = {k['name']: k for k in knowledge_list}
+    
+    # Find models that need knowledge bases
+    models_with_knowledge = []
+    for model in config.get('models', []):
+        if 'knowledge_names' in model:
+            models_with_knowledge.append(model)
+    
+    if not models_with_knowledge:
+        print("   ℹ️  No models require knowledge base associations")
+        return 0
+    
+    associated = 0
+    for model in models_with_knowledge:
+        try:
+            print(f"\n   📚 Updating model '{model['name']}' with knowledge bases...")
+            
+            # Get current model data
+            response = client.get(f"/api/v1/models/model?id={model['id']}", 
+                                extra_headers={"Priority": "u=4"})
+            model_data = client._parse_json_response(response, f"/api/v1/models/model?id={model['id']}")
+            
+            # Build knowledge array
+            knowledge_items = []
+            for knowledge_name in model['knowledge_names']:
+                if knowledge_name in knowledge_map:
+                    knowledge = knowledge_map[knowledge_name]
+                    # Build knowledge item with required fields
+                    knowledge_item = {
+                        "id": knowledge['id'],
+                        "user_id": knowledge['user_id'],
+                        "name": knowledge['name'],
+                        "description": knowledge.get('description', ''),
+                        "data": knowledge.get('data', {"file_ids": []}),
+                        "meta": knowledge.get('meta', None),
+                        "access_control": knowledge.get('access_control', None),
+                        "created_at": knowledge['created_at'],
+                        "updated_at": knowledge['updated_at'],
+                        "user": knowledge.get('user', {}),
+                        "files": knowledge.get('files', []),
+                        "type": "collection"
+                    }
+                    knowledge_items.append(knowledge_item)
+                    print(f"      ✓ Found knowledge base: {knowledge_name}")
+                else:
+                    print(f"      ⚠️  Knowledge base not found: {knowledge_name}")
+            
+            if knowledge_items:
+                # Update model meta with knowledge
+                if 'meta' not in model_data:
+                    model_data['meta'] = {}
+                model_data['meta']['knowledge'] = knowledge_items
+                
+                # Send update request
+                update_response = client.post(f"/api/v1/models/model/update?id={model['id']}", 
+                                            json_data=model_data,
+                                            extra_headers={"Priority": "u=0"})
+                
+                print(f"   ✓ Model '{model['name']}' updated with {len(knowledge_items)} knowledge base(s)")
+                associated += 1
+            
+        except Exception as e:
+            print(f"   ✗ Failed to associate knowledge with model '{model['name']}': {e}")
+    
+    return associated
+
+
 def main():
     """Main execution function"""
     parser = argparse.ArgumentParser(description='CTF Web API Automation Script')
@@ -533,7 +803,9 @@ def main():
         'tools': 0,
         'models': 0,
         'pipelines': 0,
-        'users': 0
+        'users': 0,
+        'knowledge': 0,
+        'knowledge_associations': 0
     }
     
     # Step 1: Authenticate
@@ -577,8 +849,18 @@ def main():
                 stats['tools'] += 1
         except Exception as e:
             print(f"✗ Failed to create tool '{tool['name']}': {e}")
+
+    # Step 6: Create RAG
+    print("\n📚 Creating RAG Knowledge Bases")
+    print("------------------------------")
+    for knowledge in config.get('knowledge', []):
+        try:
+            if create_rag(client, knowledge):
+                stats['knowledge'] += 1
+        except Exception as e:
+            print(f"✗ Failed to create RAG '{knowledge['name']}': {e}")
     
-    # Step 6: Create all models
+    # Step 7: Create all models
     print("\n🤖 Creating Models")
     print("----------------")
     for model in config.get('models', []):
@@ -588,13 +870,19 @@ def main():
         except Exception as e:
             print(f"✗ Failed to create model '{model['name']}': {e}")
     
-    # Step 7: Enable pipelines configuration
+    # Step 8: Associate knowledge bases with models
+    print("\n🔗 Associating Knowledge Bases with Models")
+    print("----------------------------------------")
+    if any('knowledge_names' in model for model in config.get('models', [])):
+        stats['knowledge_associations'] = associate_knowledge_with_models(client, config)
+    
+    # Step 9: Enable pipelines configuration
     if config.get('pipelines_config'):
         print("\n🔧 Enabling Pipelines Configuration")
         print("-------------------------")
         enable_pipelines(client, config)
 
-    # Step 8: Upload pipelines
+    # Step 10: Upload pipelines
     if config.get('pipelines'):
         print("\n🚀 Uploading Pipelines")
         print("--------------------")
@@ -604,14 +892,17 @@ def main():
                     stats['pipelines'] += 1
             except Exception as e:
                 print(f"✗ Failed to upload pipeline '{pipeline['name']}': {e}")
-    
+
     # Summary
     print("\n✅ CTF setup completed!")
     print("\n📊 Summary:")
     print(f"   - Users created: {stats['users']}/{len(config.get('users', []))}")
     print(f"   - Functions created: {stats['functions']}/{len(config.get('functions', []))}")
     print(f"   - Tools created: {stats['tools']}/{len(config.get('tools', []))}")
+    print(f"   - Knowledge bases created: {stats['knowledge']}/{len(config.get('knowledge', []))}")
     print(f"   - Models created: {stats['models']}/{len(config.get('models', []))}")
+    if stats['knowledge_associations'] > 0:
+        print(f"   - Knowledge associations: {stats['knowledge_associations']}")
     print(f"   - Pipelines uploaded: {stats['pipelines']}/{len(config.get('pipelines', []))}")
     
     # Show pipeline-model associations
@@ -628,9 +919,16 @@ def main():
         for model in models_with_tools:
             print(f"   - {model['name']} → {', '.join(model['toolIds'])}")
     
+    # Show model-knowledge associations
+    models_with_knowledge = [m for m in config.get('models', []) if 'knowledge_names' in m]
+    if models_with_knowledge:
+        print("\n📚 Model-Knowledge Associations:")
+        for model in models_with_knowledge:
+            print(f"   - {model['name']} → {', '.join(model['knowledge_names'])}")
+    
     # Exit with error if any components failed
-    total_expected = len(config.get('functions', [])) + len(config.get('tools', [])) + len(config.get('models', [])) + len(config.get('pipelines', []))
-    total_created = stats['functions'] + stats['tools'] + stats['models'] + stats['pipelines']
+    total_expected = len(config.get('functions', [])) + len(config.get('tools', [])) + len(config.get('models', [])) + len(config.get('pipelines', [])) + len(config.get('knowledge', []))
+    total_created = stats['functions'] + stats['tools'] + stats['models'] + stats['pipelines'] + stats['knowledge']
     if total_created < total_expected:
         sys.exit(1)
 
