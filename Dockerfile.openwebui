@@ -21,7 +21,7 @@ fi
 
 # Create flag file if it doesn't exist
 if [ ! -f "$FLAG_FILE" ]; then
-    echo "{flag:${CTF_FLAG_CHALLENGE_7}}" > "$FLAG_FILE"
+    echo "{flag:${CTF_FLAG_CHALLENGE_8}}" > "$FLAG_FILE"
     chmod 644 "$FLAG_FILE"
     echo "Created CTF flag at: $FLAG_FILE"
 else

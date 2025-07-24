@@ -65,24 +65,27 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
    The `.env` file contains all of the flags, credentials, and other settings
 
 7. **Modifying the system prompts**
-   The system prompts for each challenge can be found in `openwebui/ctf_config_template.json`.
+   The system prompts for each challenge can be found in `openwebui/ctf_config.json.template`.
    Be careful not to modify the placeholder for the flags.
 
 8. **Adding/modifying challenges**
-   The challenges are also found in `openwebui/ctf_config_template.json`.
+   The challenges are also found in `openwebui/ctf_config.json.template`.
 
 
 ## 🎯 CTF Challenges
 
-The CTF includes 7 challenges of increasing difficulty:
+The CTF includes 9 challenges:
 
 1. **Challenge 1: Hello prompt injection!** - Basic prompt injection
 2. **Challenge 2: System Prompt Protection** - Bypass system prompt protections
 3. **Challenge 3: Input Filtering** - Defeat input filters
 4. **Challenge 4: Output Filtering** - Bypass output filters
 5. **Challenge 5: LLM Prompt Guard** - Defeat ML-based prompt injection detection
-6. **Challenge 6: Code Interpreter** - Find the flag on disk using code execution via the interpreter
-6. **Challenge 7: Calculator Agent** - Abuse the calculator to find the flag on disk
+6. **Challenge 6: All Defenses** - Defeat all of the prior defenses applied to on model
+7. **Challenge 7: Code Interpreter** - Find the flag on disk using code execution via the interpreter
+8. **Challenge 8: Calculator Agent** - Abuse the calculator to find the flag on disk
+9. **Challenge 9: RAG** - Find the flag in the documents
+
 
 ## 🛠️ Service Details
 
@@ -150,9 +153,10 @@ If ports are already in use, modify the `.env` file to change port mappings.
 ## 🏁 CTF Flag Locations
 
 Without spoiling the challenges, here's where flags are stored:
-- Challenges 1-5: In the system prompts of each model
-- Challenge 6: In the Jupyter container filesystem
-- Challenge 7: In the open-webui container filesystem
+- Challenges 1-6: In the system prompts of each model
+- Challenge 7: In the Jupyter container filesystem
+- Challenge 8: In the open-webui container filesystem
+- Challenge 9: In one of the RAG documents
 
 ## 👥 Creating Additional Users
 By default, users can sign themselves up.

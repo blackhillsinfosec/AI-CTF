@@ -9,7 +9,7 @@ RUN mkdir -p /usr/local/bin && \
 #!/bin/bash
 # Ensure flag exists in the work directory (volume mount)
 if [ ! -f /home/jovyan/work/flag.txt ]; then
-    echo "{flag:${CTF_FLAG_CHALLENGE_6}}" > /home/jovyan/work/flag.txt
+    echo "{flag:${CTF_FLAG_CHALLENGE_7}}" > /home/jovyan/work/flag.txt
     chmod 644 /home/jovyan/work/flag.txt
     chown root:root /home/jovyan/work/flag.txt
     echo "Created CTF flag in work directory"
@@ -17,7 +17,7 @@ fi
 
 # Also create flag in home directory
 if [ ! -f /home/jovyan/flag.txt ]; then
-    echo "{flag:${CTF_FLAG_CHALLENGE_6}}" > /home/jovyan/flag.txt
+    echo "{flag:${CTF_FLAG_CHALLENGE_7}}" > /home/jovyan/flag.txt
     chmod 644 /home/jovyan/flag.txt
     chown root:root /home/jovyan/flag.txt
     echo "Created CTF flag in home directory"

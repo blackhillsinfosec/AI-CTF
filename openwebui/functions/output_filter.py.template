@@ -1,0 +1,32 @@
+"""
+title: Output Filter
+author: Brian Fehrman
+version: 0.1
+"""
+
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class Filter:
+    class Valves(BaseModel):
+        priority: int = Field(
+            default=0, description="Priority level for the filter operations."
+        )
+
+    def __init__(self):
+        # Indicates custom file handling logic. This flag helps disengage default routines in favor of custom
+        # implementations, informing the WebUI to defer file-related operations to designated methods within this class.
+        # Alternatively, you can remove the files directly from the body in from the inlet hook
+        # self.file_handler = True
+
+        # Initialize 'valves' with specific configurations. Using 'Valves' instance helps encapsulate settings,
+        # which ensures settings are managed cohesively and not confused with operational flags like 'file_handler'.
+        self.valves = self.Valves()
+        pass
+
+    def outlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
+        for message in body["messages"]:
+            message["content"] = message["content"].replace(
+                "${CTF_FLAG_CHALLENGE_4}", "[REDACTED]"
+            )
+        return body
