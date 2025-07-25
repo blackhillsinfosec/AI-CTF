@@ -13,63 +13,76 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
 ### Setup Instructions
 
 1. **Clone the repository** (or ensure all files are in place):
-   ```bash
+
+    ```bash
    # Your project structure should look like:
    openwebui_ctf/
-   ├── docker-compose.yml
+   ├── .env
+   ├── Dockerfile.ctfsetup
    ├── Dockerfile.jupyter
    ├── Dockerfile.ollama
    ├── Dockerfile.openwebui
-   ├── Dockerfile.setup
    ├── README.md
+   ├── docker-compose.yml
    ├── setup.sh
-   ├── .env
    └── openwebui/
-       ├── ctf_config_template.json
-       ├── setup.py
        ├── functions/
        │   ├── input_filter.py
-       │   └── output_filter.py
+       │   ├── output_filter.py
+       │   └── output_filter_2.py
+       ├── knowledge/
+       │   ├── stargate_secret.txt.template
+       │   └── stargate_users.txt
        ├── pipelines/
        │   └── prompt_guard.py
        └── tools/
-           └── calculator.py
-           
+       │   └── calculator.py
+       ├── ctf_config_template.json
+       ├── run_setup.sh
+       ├── setup.py
 
    ```
 
-2. **Install Pre-requisites**:
+3. **Install Pre-requisites**:
+
    To install Docker, GPU drivers, and other prerequisites, run the following:
    ```bash
    ./setup -a -n
    ```
    After setup is completed, you will need to reboot.
 
-3. **Configure the CTF Environment**:
-   After install the pre-requisites and rebooting, run:
+4. **Configure the CTF Environment**:
+
+   After installing the pre-requisites and rebooting, run:
    ```bash
    ./setup --ctf
    ```
 
-4. **Wait for services to be ready** (about 2-3 minutes), then check status:
+5. **Wait for services to be ready** (about 2-3 minutes), then check status:
+
    ```bash
    docker compose logs -f ctf-setup  # Watch setup progress
    ```
 
-5. **Access the CTF**:
+7. **Access the CTF**:
    - Open WebUI: http://localhost:4242
    - Admin User: `admin@ctf.local` / `ctf_admin_password`
    - Standard User: `ctf@ctf.local` / `Hellollmworld!`
 
-6. **Modifying the flags and credentials**
-   The `.env` file contains all of the flags, credentials, and other settings
+8. **Modifying the flags and credentials**
 
-7. **Modifying the system prompts**
+   The `.env` file contains all of the flags, credentials, and other settings.
+
+   Note that files containing flag placeholders (e.g. ${CTF_CHALLENEGE_FLAG_1) end in .template. These files will be dynamically updated during the setup process. The flag placeholders are replaced with the corresponding flags in the .env file.
+
+10. **Modifying the system prompts**
+
    The system prompts for each challenge can be found in `openwebui/ctf_config.json.template`.
    Be careful not to modify the placeholder for the flags.
 
-8. **Adding/modifying challenges**
-   The challenges are also found in `openwebui/ctf_config.json.template`.
+11. **Adding/modifying challenges**
+
+The challenges are also found in `openwebui/ctf_config.json.template`.
 
 
 ## 🎯 CTF Challenges
@@ -161,7 +174,7 @@ Without spoiling the challenges, here's where flags are stored:
 ## 👥 Creating Additional Users
 By default, users can sign themselves up.
 
-To add more CTF participants as part of the automation process, modify `openwebui/ctf_config_template.json` and add users to the `users` array, then re-run the setup:
+To add more CTF participants as part of the automation process, modify `openwebui/ctf_config.json.template` and add users to the `users` array, then re-run the setup:
 ```bash
 docker compose run --rm ctf-setup
 ```
