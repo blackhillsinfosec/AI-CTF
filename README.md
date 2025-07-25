@@ -77,13 +77,13 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
 
 10. **Modifying the system prompts**
 
-   The system prompts for each challenge can be found in `openwebui/ctf_config.json.template`.
+    The system prompts for each challenge can be found in `openwebui/ctf_config.json.template`.
    
-   Be careful not to modify the placeholder for the flags.
+    Be careful not to modify the placeholder for the flags.
 
 11. **Adding/modifying challenges**
 
-   The challenges are also found in `openwebui/ctf_config.json.template`.
+    The challenges are also found in `openwebui/ctf_config.json.template`.
 
 
 ## 🎯 CTF Challenges
