@@ -139,6 +139,9 @@ docker compose down
 
 ## 🔧 Troubleshooting
 
+### Error Message when Entering a Prompt
+Sometimes you might receive an error message (typically about JSON parsing or unexpected characters) when entering a prompt to one of the challenges. Logging out and logging back in seems to clear the issue in most cases. We will investigate this error further.
+
 ### No GPU / CPU-Only Mode
 The CTF can run without a GPU but it will be very, very slow.
 
