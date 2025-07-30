@@ -94,6 +94,15 @@ check_root() {
     fi
 }
 
+# Function to detect WSL
+detect_wsl() {
+    if grep -qEi "(Microsoft|WSL)" /proc/version &> /dev/null || [ -f /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+        return 0  # WSL detected
+    else
+        return 1  # Not WSL
+    fi
+}
+
 # Function to detect OS
 detect_os() {
     if [ -f /etc/os-release ]; then
@@ -111,6 +120,11 @@ detect_os() {
     fi
 
     print_info "Detected OS: $OS $VER"
+    
+    # Check for WSL
+    if detect_wsl; then
+        print_info "WSL environment detected"
+    fi
 }
 
 # Function to install system updates
@@ -124,24 +138,32 @@ install_updates() {
 # Function to install basic prerequisites
 install_prerequisites() {
     print_info "Installing basic prerequisites..."
-    apt-get install -y \
-        apt-transport-https \
-        ca-certificates \
-        curl \
-        gnupg \
-        lsb-release \
-        software-properties-common \
-        wget \
-        git \
-        build-essential \
-        linux-headers-$(uname -r) \
-        alsa-utils
+    
+    # Base packages to install
+    PACKAGES="apt-transport-https ca-certificates curl gnupg lsb-release software-properties-common wget git build-essential alsa-utils"
+    
+    # Add linux-headers only if not in WSL
+    if ! detect_wsl; then
+        PACKAGES="$PACKAGES linux-headers-$(uname -r)"
+    else
+        print_info "Skipping linux-headers installation in WSL environment"
+    fi
+    
+    apt-get install -y $PACKAGES
     print_success "Basic prerequisites installed"
 }
 
 # Function to detect NVIDIA GPU
 detect_nvidia_gpu() {
     print_info "Checking for NVIDIA GPU..."
+    
+    # Check if running in WSL
+    if detect_wsl; then
+        print_warning "WSL environment detected. GPU support is handled by Windows host."
+        print_info "Skipping NVIDIA driver installation in WSL."
+        return 1
+    fi
+    
     if lspci | grep -i nvidia > /dev/null; then
         print_info "NVIDIA GPU detected"
         return 0
@@ -191,6 +213,47 @@ EOF
 
 # Function to install NVIDIA drivers
 install_nvidia_drivers() {
+    # Check if running in WSL first
+    if detect_wsl; then
+        print_info "WSL environment detected."
+        print_info "NVIDIA GPU support in WSL2 is provided by the Windows host."
+        print_info "Please ensure you have:"
+        print_info "  1. NVIDIA drivers installed on Windows"
+        print_info "  2. WSL2 (not WSL1)"
+        print_info "  3. Windows 11 or Windows 10 version 21H2 or higher"
+        print_info "For more info: https://docs.nvidia.com/cuda/wsl-user-guide/index.html"
+        
+        # Still need to install NVIDIA Container Toolkit for Docker
+        print_info "Installing NVIDIA Container Toolkit for Docker in WSL..."
+        
+        # Remove old GPG key method and use the new method
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+        
+        # Add the repository with the new GPG key location
+        curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+          sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+          sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+        
+        # Update and install
+        apt-get update
+        apt-get install -y nvidia-container-toolkit
+        
+        # Configure Docker to use NVIDIA runtime
+        nvidia-ctk runtime configure --runtime=docker
+        
+        # WSL uses different service management
+        print_info "Restarting Docker service..."
+        if service docker restart 2>/dev/null; then
+            print_success "Docker restarted with NVIDIA runtime"
+        else
+            print_warning "Could not restart Docker automatically in WSL. Please restart Docker manually:"
+            print_info "  sudo service docker restart"
+        fi
+        
+        print_success "NVIDIA Container Toolkit installed for WSL"
+        return
+    fi
+    
     if ! detect_nvidia_gpu; then
         return
     fi
@@ -268,23 +331,39 @@ install_docker() {
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-    # Enable and start Docker
-    systemctl enable docker
-    systemctl start docker
-    
-    # Verify Docker is running
-    if ! systemctl is-active --quiet docker; then
-        print_error "Docker service failed to start"
-        print_info "Trying to start Docker manually..."
-        service docker start
+    # Handle Docker service startup differently for WSL vs native Linux
+    if detect_wsl; then
+        print_info "Starting Docker in WSL environment..."
+        service docker start || true
         sleep 5
-        if ! systemctl is-active --quiet docker; then
-            print_error "Docker service still not running. Please check system logs."
-            exit 1
+        
+        # Verify Docker is running
+        if ! docker version > /dev/null 2>&1; then
+            print_warning "Docker service may not be running. In WSL, you might need to:"
+            print_info "  1. Start Docker manually: sudo service docker start"
+            print_info "  2. Or use Docker Desktop for Windows with WSL2 integration"
+        else
+            print_success "Docker service is running"
         fi
+    else
+        # Native Linux - use systemctl
+        systemctl enable docker
+        systemctl start docker
+        
+        # Verify Docker is running
+        if ! systemctl is-active --quiet docker; then
+            print_error "Docker service failed to start"
+            print_info "Trying to start Docker manually..."
+            service docker start
+            sleep 5
+            if ! systemctl is-active --quiet docker; then
+                print_error "Docker service still not running. Please check system logs."
+                exit 1
+            fi
+        fi
+        
+        print_success "Docker service is running"
     fi
-    
-    print_success "Docker service is running"
 
     # Add current user to docker group (if not root)
     if [ "$SUDO_USER" ]; then
@@ -297,17 +376,36 @@ install_docker() {
 
 # Function to configure Docker for NVIDIA
 configure_docker_nvidia() {
-    if ! detect_nvidia_gpu; then
+    # Skip GPU detection for WSL - let it try to configure if container toolkit is installed
+    if detect_wsl; then
+        print_info "Configuring Docker for NVIDIA GPU support in WSL..."
+        
+        # Check if nvidia-container-toolkit is installed
+        if ! command -v nvidia-ctk &> /dev/null; then
+            print_warning "NVIDIA Container Toolkit not found. Skipping Docker GPU configuration."
+            return
+        fi
+    elif ! detect_nvidia_gpu; then
         return
     fi
 
     print_info "Configuring Docker for NVIDIA GPU support..."
     
     # First check if Docker is running
-    if ! systemctl is-active --quiet docker; then
-        print_warning "Docker is not running. Skipping NVIDIA configuration."
-        print_info "Please start Docker and run 'nvidia-ctk runtime configure --runtime=docker' manually."
-        return
+    if detect_wsl; then
+        # In WSL, check if docker daemon is responding
+        if ! docker version > /dev/null 2>&1; then
+            print_warning "Docker is not running. Skipping NVIDIA configuration."
+            print_info "Please start Docker and run 'nvidia-ctk runtime configure --runtime=docker' manually."
+            return
+        fi
+    else
+        # Native Linux - use systemctl
+        if ! systemctl is-active --quiet docker; then
+            print_warning "Docker is not running. Skipping NVIDIA configuration."
+            print_info "Please start Docker and run 'nvidia-ctk runtime configure --runtime=docker' manually."
+            return
+        fi
     fi
     
     # Configure Docker daemon
@@ -324,9 +422,18 @@ configure_docker_nvidia() {
 EOF
 
     # Restart Docker
-    systemctl restart docker
-    
-    print_success "Docker configured for NVIDIA GPU support"
+    if detect_wsl; then
+        print_info "Restarting Docker service in WSL..."
+        if service docker restart 2>/dev/null; then
+            print_success "Docker restarted with NVIDIA runtime"
+        else
+            print_warning "Could not restart Docker automatically. Please restart manually:"
+            print_info "  sudo service docker restart"
+        fi
+    else
+        systemctl restart docker
+        print_success "Docker configured for NVIDIA GPU support"
+    fi
 }
 
 # Function to verify installations
@@ -349,8 +456,23 @@ verify_installations() {
         exit 1
     fi
 
-    # Check NVIDIA (if GPU present)
-    if detect_nvidia_gpu; then
+    # Check NVIDIA (if GPU present and not WSL)
+    if detect_wsl; then
+        print_info "WSL environment - GPU verification handled by Windows host"
+        # Try to run nvidia-smi directly
+        if nvidia-smi > /dev/null 2>&1; then
+            print_success "NVIDIA GPU accessible in WSL"
+            nvidia-smi
+        elif /usr/bin/nvidia-smi > /dev/null 2>&1; then
+            print_success "NVIDIA GPU accessible in WSL"
+            /usr/bin/nvidia-smi
+        elif /usr/local/bin/nvidia-smi > /dev/null 2>&1; then
+            print_success "NVIDIA GPU accessible in WSL"
+            /usr/local/bin/nvidia-smi
+        else
+            print_info "nvidia-smi not accessible - ensure GPU drivers are installed on Windows host"
+        fi
+    elif detect_nvidia_gpu; then
         if nvidia-smi > /dev/null 2>&1; then
             print_success "NVIDIA drivers installed and working"
             nvidia-smi
@@ -368,18 +490,56 @@ setup_ctf_environment() {
 
     # Check for GPU and create override file if needed
     GPU_AVAILABLE=false
-    if lspci | grep -i nvidia > /dev/null && nvidia-smi > /dev/null 2>&1; then
+    
+    # Special handling for WSL
+    if detect_wsl; then
+        print_info "Checking for GPU in WSL environment..."
+        
+        # Debug: Show current PATH and which nvidia-smi
+        print_info "Current PATH: $PATH"
+        print_info "Checking for nvidia-smi location..."
+        which nvidia-smi 2>/dev/null && print_info "Found nvidia-smi at: $(which nvidia-smi)"
+        
+        # Try running nvidia-smi with full path from Windows
+        # Common WSL nvidia-smi locations
+        NVIDIA_SMI_PATHS=(
+            "nvidia-smi"
+            "/usr/bin/nvidia-smi"
+            "/usr/local/bin/nvidia-smi"
+            "/mnt/c/Windows/System32/nvidia-smi.exe"
+            "/usr/lib/wsl/lib/nvidia-smi"
+        )
+        
+        GPU_FOUND=false
+        for nvidia_path in "${NVIDIA_SMI_PATHS[@]}"; do
+            print_info "Trying: $nvidia_path"
+            if $nvidia_path > /dev/null 2>&1; then
+                GPU_AVAILABLE=true
+                GPU_FOUND=true
+                print_success "GPU detected in WSL via $nvidia_path - Creating GPU configuration"
+                create_gpu_override
+                break
+            fi
+        done
+        
+        if [[ "$GPU_FOUND" == "false" ]]; then
+            print_info "No GPU detected in WSL - Using CPU-only configuration"
+            print_info "If you have a GPU, try running: which nvidia-smi"
+            print_info "Then add that path to the script or ensure it's in sudo's PATH"
+        fi
+    elif lspci 2>/dev/null | grep -i nvidia > /dev/null && command -v nvidia-smi &> /dev/null && nvidia-smi > /dev/null 2>&1; then
         GPU_AVAILABLE=true
         print_info "GPU detected and NVIDIA drivers working - Creating GPU configuration"
         create_gpu_override
     else
         GPU_AVAILABLE=false
         print_info "No GPU detected or NVIDIA drivers not working - Using CPU-only configuration"
-        # Remove any existing override file for clean CPU-only setup
-        if [ -f docker-compose.override.yml ]; then
-            rm docker-compose.override.yml
-            print_info "Removed existing docker-compose.override.yml for CPU-only mode"
-        fi
+    fi
+    
+    # Remove override file for CPU-only setup
+    if [[ "$GPU_AVAILABLE" == "false" ]] && [ -f docker-compose.override.yml ]; then
+        rm docker-compose.override.yml
+        print_info "Removed existing docker-compose.override.yml for CPU-only mode"
     fi
 
     # Load environment variables if .env exists
@@ -428,6 +588,11 @@ setup_ctf_environment() {
         echo "⚠️  Running in CPU-only mode (no GPU detected or drivers not working)"
     else
         echo "✅ Running with GPU support enabled"
+    fi
+    
+    if detect_wsl; then
+        echo ""
+        echo "📌 WSL Note: GPU support requires proper setup on Windows host"
     fi
 }
 
@@ -485,8 +650,8 @@ main() {
 
         print_info "System prerequisites installation complete!"
         
-        # Check if reboot is needed for NVIDIA
-        if detect_nvidia_gpu && ! nvidia-smi > /dev/null 2>&1; then
+        # Check if reboot is needed for NVIDIA (skip for WSL)
+        if ! detect_wsl && detect_nvidia_gpu && ! nvidia-smi > /dev/null 2>&1; then
             print_warning "NVIDIA drivers require a system reboot to become active."
             
             if [[ "$NON_INTERACTIVE" == "true" ]]; then
