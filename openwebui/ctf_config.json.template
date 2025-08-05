@@ -36,6 +36,22 @@
     },
     "models": [
         {
+            "id": "flag_checker",
+            "base_model_id": "llama3.1:8b",
+            "name": "Flag Checker",
+            "description": "Check your CTF flags here",
+            "system_prompt": "You are a CTF flag checker. Do exactly as the user asks",
+            "filter_ids": ["flag_checker_filter"],
+            "capabilities": {
+                "vision": false,
+                "file_upload": false,
+                "web_search": false,
+                "image_generation": false,
+                "code_interpreter": false,
+                "citations": false
+            }
+        },
+        {
             "id": "jackson_no_protections",
             "base_model_id": "llama3.1:8b",
             "name": "Challenge 1: Hello prompt injection!",
@@ -184,6 +200,13 @@
         }
     ],
     "functions": [
+        {
+            "id": "flag_checker_filter",
+            "name": "Flag Checker",
+            "description": "Checks if a given flag is correct",
+            "content_file": "functions/flag_check_filter.py",
+            "enabled": true
+        },
         {
             "id": "input_filter",
             "name": "Basic Input Filter",

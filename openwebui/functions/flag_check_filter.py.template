@@ -1,0 +1,82 @@
+"""
+title: CTF Flag Checker
+author: Brian Fehrman
+version: 0.2
+"""
+
+from pydantic import BaseModel, Field
+from typing import Optional
+
+
+class Filter:
+    class Valves(BaseModel):
+        priority: int = Field(
+            default=0, description="Priority level for the filter operations."
+        )
+        pass
+
+    def __init__(self):
+        # Initialize 'valves' with specific configurations
+        self.valves = self.Valves()
+        # Flag to track if we need to override the response
+        self.flag_check_result = None
+        pass
+
+    def inlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
+        """
+        Pre-process the request to check for CTF flags and modify the message accordingly.
+        """
+        print(f"inlet:{__name__}")
+        print(f"inlet:body:{body}")
+        print(f"inlet:user:{__user__}")
+        
+        filtered_words = [
+            "${CTF_FLAG_CHALLENGE_1}",
+            "${CTF_FLAG_CHALLENGE_2}",
+            "${CTF_FLAG_CHALLENGE_3}",
+            "${CTF_FLAG_CHALLENGE_4}",
+            "${CTF_FLAG_CHALLENGE_5}",
+            "${CTF_FLAG_CHALLENGE_6}",
+            "${CTF_FLAG_CHALLENGE_7}",
+            "${CTF_FLAG_CHALLENGE_8}",
+            "${CTF_FLAG_CHALLENGE_9}",
+        ]
+        
+        if __user__.get("role", "admin") in ["user", "admin"]:
+            last_message = body["messages"][-1]["content"]
+            
+            # Check if any flag is present
+            flag_found = False
+            for word in filtered_words:
+                if word in last_message:
+                    flag_found = True
+                    break
+            
+            # Replace the user's message with a direct response instruction
+            if flag_found:
+                body["messages"][-1]["content"] = "Respond with exactly this message: '🎉 Congratulations! You found the correct CTF flag! Well done! 🎉'"
+                self.flag_check_result = "correct"
+            else:
+                body["messages"][-1]["content"] = "Respond with exactly this message: '❌ Sorry, that's not the correct flag. Please try again! ❌'"
+                self.flag_check_result = "incorrect"
+                
+        return body
+
+    def outlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
+        """
+        Post-process the response to ensure our flag check messages are properly formatted.
+        """
+        print(f"outlet:{__name__}")
+        print(f"outlet:body:{body}")
+        
+        # If we performed a flag check, we can ensure the response is what we want
+        if self.flag_check_result:
+            if self.flag_check_result == "correct":
+                body["choices"][0]["message"]["content"] = "🎉 Congratulations! You found the correct CTF flag! Well done! 🎉"
+            else:
+                body["choices"][0]["message"]["content"] = "❌ Sorry, that's not the correct flag. Please try again! ❌"
+            
+            # Reset the flag for next interaction
+            self.flag_check_result = None
+        
+        return body
