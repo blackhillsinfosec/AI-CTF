@@ -27,9 +27,10 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
    ├── setup.sh
    └── openwebui/
        ├── functions/
+       │   ├── flag_check_filter.py.template
        │   ├── input_filter.py
-       │   ├── output_filter.py
-       │   └── output_filter_2.py
+       │   ├── output_filter.py.template
+       │   └── output_filter_2.py.template
        ├── knowledge/
        │   ├── stargate_secret.txt.template
        │   └── stargate_users.txt
@@ -37,7 +38,7 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
        │   └── prompt_guard.py
        └── tools/
        │   └── calculator.py
-       ├── ctf_config_template.json
+       ├── ctf_config.json.template
        ├── run_setup.sh
        ├── setup.py
 
@@ -100,6 +101,16 @@ The CTF includes 9 challenges:
 8. **Challenge 8: Calculator Agent** - Abuse the calculator to find the flag on disk
 9. **Challenge 9: RAG** - Find the flag in the documents
 
+
+## 🚩 Checking Flags
+
+The CTF has a model that users can use to check if a flag is correct.
+
+The model is **Flag Checker** and can be selected just like any of the challenges can be.
+
+Send a potential flag as a prompt and it will tell you if it was correct or not.
+
+This model is templated, so it is dynamically updated when flags are changed in the .env file.
 
 ## 🛠️ Service Details
 
