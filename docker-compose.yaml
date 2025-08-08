@@ -86,6 +86,7 @@ services:
       - CTF_FLAG_CHALLENGE_7=${CTF_FLAG_CHALLENGE_7}
       - CTF_FLAG_CHALLENGE_8=${CTF_FLAG_CHALLENGE_8}
       - CTF_FLAG_CHALLENGE_9=${CTF_FLAG_CHALLENGE_9}
+      - CTF_FLAG_CHALLENGE_10=${CTF_FLAG_CHALLENGE_10}
     depends_on:
       open-webui:
         condition: service_healthy
