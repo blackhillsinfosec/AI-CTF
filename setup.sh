@@ -14,6 +14,12 @@ SETUP_CTF=false
 AUTO_REBOOT=false
 NON_INTERACTIVE=false
 
+# Global variables for OS detection
+OS=""
+VER=""
+IS_WSL=false
+IS_MACOS=false
+
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -22,7 +28,7 @@ show_usage() {
     echo "  -p, --prerequisites    Install system prerequisites (Docker, NVIDIA drivers)"
     echo "  -c, --ctf             Setup CTF environment"
     echo "  -a, --all             Install prerequisites AND setup CTF environment"
-    echo "  -r, --auto-reboot     Automatically reboot if required (non-interactive)"
+    echo "  -r, --auto-reboot     Automatically reboot if required (non-interactive, Linux only)"
     echo "  -n, --non-interactive Run in non-interactive mode (assumes yes to all prompts)"
     echo "  -h, --help            Show this help message"
     echo ""
@@ -30,7 +36,7 @@ show_usage() {
     echo "  $0 --all              # Install everything"
     echo "  $0 --prerequisites    # Only install system prerequisites"
     echo "  $0 --ctf              # Only setup CTF environment"
-    echo "  $0 --all --auto-reboot --non-interactive  # Full automated setup"
+    echo "  $0 --all --auto-reboot --non-interactive  # Full automated setup (Linux only)"
 }
 
 # Parse command line arguments
@@ -86,10 +92,15 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to check if running as root
+# Function to check if running as root (Linux only)
 check_root() {
+    if [[ "$IS_MACOS" == "true" ]]; then
+        # On macOS, we don't need root for most operations
+        return 0
+    fi
+    
     if [[ $EUID -ne 0 ]]; then
-        print_error "This script must be run as root (use sudo)"
+        print_error "This script must be run as root on Linux (use sudo)"
         exit 1
     fi
 }
@@ -105,17 +116,33 @@ detect_wsl() {
 
 # Function to detect OS
 detect_os() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        IS_MACOS=true
+        OS="macos"
+        VER=$(sw_vers -productVersion)
+        print_info "Detected OS: macOS $VER"
+        
+        # Check for Apple Silicon vs Intel
+        if [[ $(uname -m) == "arm64" ]]; then
+            print_info "Architecture: Apple Silicon (ARM64)"
+        else
+            print_info "Architecture: Intel (x86_64)"
+        fi
+        
+        return 0
+    fi
+    
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS=$ID
         VER=$VERSION_ID
     else
-        print_error "Cannot detect OS. This script requires Debian or Ubuntu."
+        print_error "Cannot detect OS. This script requires Debian, Ubuntu, or macOS."
         exit 1
     fi
 
     if [[ "$OS" != "debian" && "$OS" != "ubuntu" ]]; then
-        print_error "This script only supports Debian and Ubuntu."
+        print_error "This script only supports Debian, Ubuntu, and macOS."
         exit 1
     fi
 
@@ -123,27 +150,82 @@ detect_os() {
     
     # Check for WSL
     if detect_wsl; then
+        IS_WSL=true
         print_info "WSL environment detected"
     fi
 }
 
 # Function to install system updates
 install_updates() {
-    print_info "Updating system packages..."
-    apt-get update
-    apt-get upgrade -y
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_info "Updating Homebrew packages..."
+        if command -v brew &> /dev/null; then
+            brew update
+            brew upgrade
+        else
+            print_warning "Homebrew not found. Will install it first."
+        fi
+    else
+        print_info "Updating system packages..."
+        apt-get update
+        apt-get upgrade -y
+    fi
     print_success "System packages updated"
+}
+
+# Function to install Homebrew on macOS
+install_homebrew() {
+    if [[ "$IS_MACOS" != "true" ]]; then
+        return 0
+    fi
+    
+    if command -v brew &> /dev/null; then
+        print_info "Homebrew already installed"
+        return 0
+    fi
+    
+    print_info "Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    
+    # Add Homebrew to PATH for Apple Silicon Macs
+    if [[ $(uname -m) == "arm64" ]]; then
+        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    fi
+    
+    print_success "Homebrew installed"
 }
 
 # Function to install basic prerequisites
 install_prerequisites() {
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_info "Installing basic prerequisites on macOS..."
+        
+        # Ensure Homebrew is installed
+        install_homebrew
+        
+        # Install basic packages
+        brew install curl wget git
+        
+        # Install command line tools if not already installed
+        if ! xcode-select -p &> /dev/null; then
+            print_info "Installing Xcode Command Line Tools..."
+            xcode-select --install
+            print_warning "Please complete the Xcode Command Line Tools installation and re-run the script."
+            exit 0
+        fi
+        
+        print_success "Basic prerequisites installed on macOS"
+        return 0
+    fi
+    
     print_info "Installing basic prerequisites..."
     
     # Base packages to install
     PACKAGES="apt-transport-https ca-certificates curl gnupg lsb-release software-properties-common wget git build-essential alsa-utils"
     
     # Add linux-headers only if not in WSL
-    if ! detect_wsl; then
+    if [[ "$IS_WSL" != "true" ]]; then
         PACKAGES="$PACKAGES linux-headers-$(uname -r)"
     else
         print_info "Skipping linux-headers installation in WSL environment"
@@ -157,8 +239,14 @@ install_prerequisites() {
 detect_nvidia_gpu() {
     print_info "Checking for NVIDIA GPU..."
     
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_info "macOS detected. NVIDIA GPU support is limited on modern Macs."
+        print_info "Most modern Macs use Apple Silicon or AMD GPUs."
+        return 1
+    fi
+    
     # Check if running in WSL
-    if detect_wsl; then
+    if [[ "$IS_WSL" == "true" ]]; then
         print_warning "WSL environment detected. GPU support is handled by Windows host."
         print_info "Skipping NVIDIA driver installation in WSL."
         return 1
@@ -176,6 +264,12 @@ detect_nvidia_gpu() {
 # Function to create docker-compose override for GPU mode
 create_gpu_override() {
     print_info "Creating docker-compose override for GPU mode..."
+    
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_warning "GPU passthrough not supported on macOS. Creating CPU-only configuration."
+        return 0
+    fi
+    
     cat > docker-compose.override.yml << 'EOF'
 # This override file enables GPU support for systems with NVIDIA GPUs
 version: '3.8'
@@ -213,8 +307,14 @@ EOF
 
 # Function to install NVIDIA drivers
 install_nvidia_drivers() {
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_info "macOS detected - NVIDIA GPU drivers not applicable"
+        print_info "Modern Macs use Apple Silicon or AMD GPUs with Metal acceleration"
+        return 0
+    fi
+    
     # Check if running in WSL first
-    if detect_wsl; then
+    if [[ "$IS_WSL" == "true" ]]; then
         print_info "WSL environment detected."
         print_info "NVIDIA GPU support in WSL2 is provided by the Windows host."
         print_info "Please ensure you have:"
@@ -316,6 +416,42 @@ install_nvidia_drivers() {
 install_docker() {
     print_info "Installing Docker..."
     
+    if [[ "$IS_MACOS" == "true" ]]; then
+        # Check if Docker is already installed
+        if command -v docker &> /dev/null; then
+            print_success "Docker already installed"
+            return 0
+        fi
+        
+        # Check if Docker Desktop is installed
+        if [ -d "/Applications/Docker.app" ]; then
+            print_success "Docker Desktop already installed"
+            print_info "Please ensure Docker Desktop is running"
+            return 0
+        fi
+        
+        print_info "Installing Docker Desktop for macOS..."
+        print_warning "Docker Desktop installation requires manual steps:"
+        print_info "1. Download Docker Desktop from: https://www.docker.com/products/docker-desktop/"
+        print_info "2. Install the .dmg file"
+        print_info "3. Start Docker Desktop"
+        print_info "4. Re-run this script to continue"
+        
+        if [[ "$NON_INTERACTIVE" != "true" ]]; then
+            read -p "Press Enter after installing Docker Desktop..."
+        fi
+        
+        # Check if Docker is now available
+        if ! command -v docker &> /dev/null; then
+            print_error "Docker not found. Please install Docker Desktop and ensure it's running."
+            exit 1
+        fi
+        
+        print_success "Docker Desktop detected"
+        return 0
+    fi
+    
+    # Linux installation
     # Remove old Docker installations
     apt-get remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
 
@@ -332,7 +468,7 @@ install_docker() {
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
     # Handle Docker service startup differently for WSL vs native Linux
-    if detect_wsl; then
+    if [[ "$IS_WSL" == "true" ]]; then
         print_info "Starting Docker in WSL environment..."
         service docker start || true
         sleep 5
@@ -365,8 +501,8 @@ install_docker() {
         print_success "Docker service is running"
     fi
 
-    # Add current user to docker group (if not root)
-    if [ "$SUDO_USER" ]; then
+    # Add current user to docker group (if not root and not macOS)
+    if [[ "$IS_MACOS" != "true" ]] && [ "$SUDO_USER" ]; then
         usermod -aG docker $SUDO_USER
         print_info "Added $SUDO_USER to docker group. User needs to log out and back in for this to take effect."
     fi
@@ -376,8 +512,13 @@ install_docker() {
 
 # Function to configure Docker for NVIDIA
 configure_docker_nvidia() {
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_info "macOS detected - NVIDIA Docker configuration not applicable"
+        return 0
+    fi
+    
     # Skip GPU detection for WSL - let it try to configure if container toolkit is installed
-    if detect_wsl; then
+    if [[ "$IS_WSL" == "true" ]]; then
         print_info "Configuring Docker for NVIDIA GPU support in WSL..."
         
         # Check if nvidia-container-toolkit is installed
@@ -392,7 +533,7 @@ configure_docker_nvidia() {
     print_info "Configuring Docker for NVIDIA GPU support..."
     
     # First check if Docker is running
-    if detect_wsl; then
+    if [[ "$IS_WSL" == "true" ]]; then
         # In WSL, check if docker daemon is responding
         if ! docker version > /dev/null 2>&1; then
             print_warning "Docker is not running. Skipping NVIDIA configuration."
@@ -422,7 +563,7 @@ configure_docker_nvidia() {
 EOF
 
     # Restart Docker
-    if detect_wsl; then
+    if [[ "$IS_WSL" == "true" ]]; then
         print_info "Restarting Docker service in WSL..."
         if service docker restart 2>/dev/null; then
             print_success "Docker restarted with NVIDIA runtime"
@@ -444,7 +585,10 @@ verify_installations() {
     if docker --version > /dev/null 2>&1; then
         print_success "Docker: $(docker --version)"
     else
-        print_error "Docker installation failed"
+        print_error "Docker installation failed or Docker is not running"
+        if [[ "$IS_MACOS" == "true" ]]; then
+            print_info "On macOS, ensure Docker Desktop is running"
+        fi
         exit 1
     fi
 
@@ -456,8 +600,13 @@ verify_installations() {
         exit 1
     fi
 
-    # Check NVIDIA (if GPU present and not WSL)
-    if detect_wsl; then
+    # Check NVIDIA (if GPU present and not WSL and not macOS)
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_info "macOS - GPU verification not applicable (using CPU-only mode)"
+        return 0
+    fi
+    
+    if [[ "$IS_WSL" == "true" ]]; then
         print_info "WSL environment - GPU verification handled by Windows host"
         # Try to run nvidia-smi directly
         if nvidia-smi > /dev/null 2>&1; then
@@ -482,7 +631,7 @@ verify_installations() {
     fi
 }
 
-# Main CTF setup function (simplified)
+# Main CTF setup function
 setup_ctf_environment() {
     echo ""
     echo "🏁 Initializing Open WebUI CTF Environment"
@@ -491,8 +640,10 @@ setup_ctf_environment() {
     # Check for GPU and create override file if needed
     GPU_AVAILABLE=false
     
-    # Special handling for WSL
-    if detect_wsl; then
+    if [[ "$IS_MACOS" == "true" ]]; then
+        print_info "macOS detected - Using CPU-only configuration"
+        GPU_AVAILABLE=false
+    elif [[ "$IS_WSL" == "true" ]]; then
         print_info "Checking for GPU in WSL environment..."
         
         # Debug: Show current PATH and which nvidia-smi
@@ -584,13 +735,15 @@ setup_ctf_environment() {
     echo "- Jupyter flag: /home/jovyan/flag.txt and /home/jovyan/work/flag.txt in jupyter container"
     echo ""
     
-    if [[ "$GPU_AVAILABLE" == "false" ]]; then
+    if [[ "$IS_MACOS" == "true" ]]; then
+        echo "🍎 Running on macOS in CPU-only mode"
+    elif [[ "$GPU_AVAILABLE" == "false" ]]; then
         echo "⚠️  Running in CPU-only mode (no GPU detected or drivers not working)"
     else
         echo "✅ Running with GPU support enabled"
     fi
     
-    if detect_wsl; then
+    if [[ "$IS_WSL" == "true" ]]; then
         echo ""
         echo "📌 WSL Note: GPU support requires proper setup on Windows host"
     fi
@@ -603,11 +756,11 @@ main() {
     echo "======================================"
     echo ""
 
-    # Check if running as root
-    check_root
-
-    # Detect OS
+    # Detect OS first
     detect_os
+
+    # Check if running as root (Linux only)
+    check_root
 
     # If no arguments provided and not non-interactive, run interactive mode
     if [[ "$INSTALL_PREREQUISITES" == "false" && "$SETUP_CTF" == "false" && "$NON_INTERACTIVE" == "false" ]]; then
@@ -636,22 +789,26 @@ main() {
         # Install prerequisites
         install_prerequisites
 
-        # Install NVIDIA drivers
-        install_nvidia_drivers
+        # Install NVIDIA drivers (Linux only)
+        if [[ "$IS_MACOS" != "true" ]]; then
+            install_nvidia_drivers
+        fi
 
         # Install Docker
         install_docker
 
-        # Configure Docker for NVIDIA
-        configure_docker_nvidia
+        # Configure Docker for NVIDIA (Linux only)
+        if [[ "$IS_MACOS" != "true" ]]; then
+            configure_docker_nvidia
+        fi
 
         # Verify installations
         verify_installations
 
         print_info "System prerequisites installation complete!"
         
-        # Check if reboot is needed for NVIDIA (skip for WSL)
-        if ! detect_wsl && detect_nvidia_gpu && ! nvidia-smi > /dev/null 2>&1; then
+        # Check if reboot is needed for NVIDIA (skip for WSL and macOS)
+        if [[ "$IS_MACOS" != "true" ]] && [[ "$IS_WSL" != "true" ]] && detect_nvidia_gpu && ! nvidia-smi > /dev/null 2>&1; then
             print_warning "NVIDIA drivers require a system reboot to become active."
             
             if [[ "$NON_INTERACTIVE" == "true" ]]; then
@@ -685,6 +842,15 @@ main() {
         # Check if Docker is installed
         if ! command -v docker &> /dev/null; then
             print_error "Docker is not installed. Please run '$0 --prerequisites' first."
+            exit 1
+        fi
+        
+        # Check if Docker is running
+        if ! docker version > /dev/null 2>&1; then
+            print_error "Docker is not running. Please start Docker and try again."
+            if [[ "$IS_MACOS" == "true" ]]; then
+                print_info "On macOS, start Docker Desktop application."
+            fi
             exit 1
         fi
         
