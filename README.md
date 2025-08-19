@@ -35,12 +35,13 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
        │   ├── stargate_secret.txt.template
        │   └── stargate_users.txt
        ├── pipelines/
+       │   ├── email_summarizer.py.template
        │   └── prompt_guard.py
        └── tools/
        │   └── calculator.py
        ├── ctf_config.json.template
        ├── run_setup.sh
-       ├── setup.py
+       └── setup.py
 
    ```
 
@@ -89,7 +90,7 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
 
 ## 🎯 CTF Challenges
 
-The CTF includes 9 challenges:
+The CTF includes 10 challenges:
 
 1. **Challenge 1: Hello prompt injection!** - Basic prompt injection
 2. **Challenge 2: System Prompt Protection** - Bypass system prompt protections
@@ -100,6 +101,7 @@ The CTF includes 9 challenges:
 7. **Challenge 7: Code Interpreter** - Find the flag on disk using code execution via the interpreter
 8. **Challenge 8: Calculator Agent** - Abuse the calculator to find the flag on disk
 9. **Challenge 9: RAG** - Find the flag in the documents
+10. **Challenge 10: Email Summarizer** - Trick the email summarizer into sending an email to a target, which will give you the flag
 
 
 ## 🚩 Checking Flags
@@ -185,6 +187,7 @@ Without spoiling the challenges, here's where flags are stored:
 - Challenge 7: In the Jupyter container filesystem
 - Challenge 8: In the open-webui container filesystem
 - Challenge 9: In one of the RAG documents
+- Challenge 10: The flag will be returned if the email summarizer sends a specific email to a target recipient
 
 ## 👥 Creating Additional Users
 By default, users can sign themselves up.
