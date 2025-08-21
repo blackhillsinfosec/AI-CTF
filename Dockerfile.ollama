@@ -22,6 +22,15 @@ else
     echo "Model llama3.1:8b already exists, skipping pull."
 fi
 
+# Check if the model already exists
+if ! ollama list | grep -q "llama3.2-vision:11b"; then
+    echo "Pulling llama3.2-vision:11b model..."
+    ollama pull llama3.2-vision:11b
+    echo "Model pull complete!"
+else
+    echo "Model llama3.2-vision:11b already exists, skipping pull."
+fi
+
 # Keep Ollama running in the foreground
 wait $OLLAMA_PID
 EOF

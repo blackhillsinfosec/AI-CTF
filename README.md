@@ -24,10 +24,12 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
    ├── Dockerfile.openwebui
    ├── README.md
    ├── docker-compose.yml
+   ├── docker-compose.override.yml
    ├── setup.sh
    └── openwebui/
        ├── functions/
        │   ├── flag_check_filter.py.template
+       │   ├── image_text_filter.py
        │   ├── input_filter.py
        │   ├── output_filter.py.template
        │   └── output_filter_2.py.template
@@ -90,7 +92,7 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
 
 ## 🎯 CTF Challenges
 
-The CTF includes 10 challenges:
+The CTF includes 11 challenges:
 
 1. **Challenge 1: Hello prompt injection!** - Basic prompt injection
 2. **Challenge 2: System Prompt Protection** - Bypass system prompt protections
@@ -102,7 +104,7 @@ The CTF includes 10 challenges:
 8. **Challenge 8: Calculator Agent** - Abuse the calculator to find the flag on disk
 9. **Challenge 9: RAG** - Find the flag in the documents
 10. **Challenge 10: Email Summarizer** - Trick the email summarizer into sending an email to a target, which will give you the flag
-
+10. **Challenge 11: Multi-Modal** - Use a method other than text to retrieve the flag
 
 ## 🚩 Checking Flags
 
@@ -188,6 +190,7 @@ Without spoiling the challenges, here's where flags are stored:
 - Challenge 8: In the open-webui container filesystem
 - Challenge 9: In one of the RAG documents
 - Challenge 10: The flag will be returned if the email summarizer sends a specific email to a target recipient
+- Challenge 11: In the system prompt of the model
 
 ## 👥 Creating Additional Users
 By default, users can sign themselves up.
