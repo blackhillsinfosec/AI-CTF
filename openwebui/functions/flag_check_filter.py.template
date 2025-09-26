@@ -40,7 +40,8 @@ class Filter:
             "${CTF_FLAG_CHALLENGE_7}",
             "${CTF_FLAG_CHALLENGE_8}",
             "${CTF_FLAG_CHALLENGE_9}",
-            "${CTF_FLAG_CHALLENGE_10}"
+            "${CTF_FLAG_CHALLENGE_10}",
+            "${CTF_FLAG_CHALLENGE_11}"
         ]
         
         if __user__.get("role", "admin") in ["user", "admin"]:
