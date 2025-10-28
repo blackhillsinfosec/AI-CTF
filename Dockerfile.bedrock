@@ -1,0 +1,30 @@
+# Dockerfile for AWS Bedrock Access Gateway
+# Provides OpenAI-compatible API for Amazon Bedrock models
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install git and dependencies
+RUN apt-get update && \
+    apt-get install -y git && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Clone the bedrock-access-gateway repository
+RUN git clone https://github.com/aws-samples/bedrock-access-gateway.git /tmp/bedrock-gateway && \
+    cp -r /tmp/bedrock-gateway/src/* /app/ && \
+    rm -rf /tmp/bedrock-gateway
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Expose port 80 (internal port for the gateway)
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:80/health', timeout=5)" || exit 1
+
+# Run the application using uvicorn (app is in api/app.py)
+CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "80"]
