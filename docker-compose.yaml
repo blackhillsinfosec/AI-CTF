@@ -1,4 +1,25 @@
 services:
+  bedrock-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.bedrock
+    container_name: bedrock-gateway
+    ports:
+      - "${BEDROCK_PORT:-8081}:80"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - API_KEY=${BEDROCK_API_KEY:-bedrock}
+      - DEBUG=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:80/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
   ollama:
     build:
       context: .

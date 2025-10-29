@@ -516,12 +516,63 @@ EOF
 }
 
 # -------------------------
+# AWS Bedrock Configuration
+# -------------------------
+configure_bedrock() {
+    print_info "Configuring AWS Bedrock integration..."
+
+    if [[ ! -f .env ]]; then
+        print_error ".env file not found!"
+        exit 1
+    fi
+
+    # Prompt for AWS credentials
+    echo ""
+    echo "🔐 AWS Bedrock Configuration"
+    echo "=============================="
+    echo ""
+
+    if [[ "$NON_INTERACTIVE" == "true" ]]; then
+        print_info "Running in non-interactive mode. Using credentials from .env file."
+        return
+    fi
+
+    read -p "Configure AWS Bedrock? [y/N] " -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Skipping AWS Bedrock configuration"
+        return
+    fi
+
+    echo "Enter your AWS credentials for Bedrock access:"
+    echo "(These will be stored in the .env file)"
+    echo ""
+
+    read -p "AWS Access Key ID: " AWS_KEY
+    read -sp "AWS Secret Access Key: " AWS_SECRET
+    echo ""
+    read -p "AWS Region [us-east-1]: " AWS_REG
+    AWS_REG=${AWS_REG:-us-east-1}
+
+    # Update .env file with AWS credentials
+    sed -i "s/AWS_ACCESS_KEY_ID=.*/AWS_ACCESS_KEY_ID=${AWS_KEY}/" .env
+    sed -i "s/AWS_SECRET_ACCESS_KEY=.*/AWS_SECRET_ACCESS_KEY=${AWS_SECRET}/" .env
+    sed -i "s/AWS_DEFAULT_REGION=.*/AWS_DEFAULT_REGION=${AWS_REG}/" .env
+    sed -i "s/AWS_REGION=.*/AWS_REGION=${AWS_REG}/" .env
+
+    print_success "AWS Bedrock configuration saved to .env file"
+}
+
+# -------------------------
 # CTF setup
 # -------------------------
 setup_ctf_environment() {
     echo ""
     echo "🏁 Initializing Open WebUI CTF Environment"
     echo "=========================================="
+
+    # Configure Bedrock if needed
+    configure_bedrock
 
     GPU_AVAILABLE=false
 
@@ -574,8 +625,13 @@ setup_ctf_environment() {
     echo ""
     echo "📋 Access Information:"
     echo "- Open WebUI: http://localhost:${OPENWEBUI_PORT:-4242}"
+    echo "- Bedrock Gateway: http://localhost:${BEDROCK_PORT:-8081}"
     echo "- Jupyter: http://localhost:${JUPYTER_PORT:-8888}"
     echo "- Jupyter Token: ${JUPYTER_TOKEN:-AntiSyphonBlackHillsTrainingFtw!}"
+    echo ""
+    echo "🔐 Bedrock Configuration:"
+    echo "- API Base URL: http://localhost:${BEDROCK_PORT:-8081}/api/v1"
+    echo "- API Key: ${BEDROCK_API_KEY:-bedrock}"
     echo ""
     echo "🔐 Login Credentials:"
     echo "- Admin: ${CTF_ADMIN_EMAIL:-admin@ctf.local} / ${CTF_ADMIN_PASSWORD:-ctf_admin_password}"
