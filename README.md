@@ -9,6 +9,7 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
 - At least 8GB of RAM available
 - 20GB of free disk space (for models and containers)
 - (Optional BUT HIGHLY RECOMMENDED) NVIDIA GPU for better performance
+- (Optional) AWS Account with Bedrock access for cloud-based LLM models
 
 ### Setup Instructions
 
@@ -73,6 +74,60 @@ This project provides a complete Capture The Flag (CTF) environment based on Ope
    - Admin User: `admin@ctf.local` / `ctf_admin_password`
    - Standard User: `ctf@ctf.local` / `Hellollmworld!`
 
+## 🛌 Amazon Bedrock Integration
+
+This CTF environment includes optional support for Amazon Bedrock, allowing you to use cloud-based LLM models alongside the local Ollama models.
+
+### Bedrock Setup
+
+1. **AWS Credentials**: Before running the CTF setup, ensure you have:
+   - AWS Access Key ID
+   - AWS Secret Access Key
+   - AWS Region with Bedrock access enabled (default: us-east-1)
+
+2. **Configure During Setup**: When running `./setup.sh --ctf`, you'll be prompted to configure AWS Bedrock credentials. The setup will:
+   - Ask if you want to configure Bedrock
+   - Prompt for your AWS credentials
+   - Store them securely in the `.env` file
+
+3. **Manual Configuration**: You can also manually edit the `.env` file:
+   ```bash
+   AWS_ACCESS_KEY_ID=your_access_key_here
+   AWS_SECRET_ACCESS_KEY=your_secret_key_here
+   AWS_DEFAULT_REGION=us-east-1
+   AWS_REGION=us-east-1
+   BEDROCK_PORT=8081
+   BEDROCK_API_KEY=bedrock
+   ```
+
+4. **Accessing Bedrock in Open WebUI**:
+   - Navigate to Settings > Admin Settings > Connections
+   - Add a new OpenAI API connection with:
+     - **API Base URL**: `http://bedrock-gateway:80/api/v1`
+     - **API Key**: `bedrock` (or the value set in BEDROCK_API_KEY)
+   - Available models will appear in the model selector
+
+5. **Available Bedrock Models**: The gateway provides access to various Amazon Bedrock models including:
+   - Anthropic Claude models (Claude 3 Opus, Sonnet, Haiku)
+   - Amazon Titan models
+   - AI21 Jurassic models
+   - Cohere models
+   - Meta Llama models
+
+6. **Embedding Models**: For RAG functionality, you can configure embedding models:
+   - Go to Settings > Admin Settings > Documents
+   - Set Embedding Model Engine to use Bedrock endpoint
+   - Recommended models: `cohere.embed-english-v3` or `cohere.embed-multilingual-v3`
+
+### Bedrock Gateway Details
+
+- **Container**: `bedrock-gateway`
+- **Port**: 8081 (configurable via BEDROCK_PORT in .env)
+- **API Endpoint**: `http://localhost:8081/api/v1`
+- **Health Check**: `http://localhost:8081/health`
+
+The Bedrock Gateway provides an OpenAI-compatible API, making it seamless to use with Open WebUI.
+
 8. **Modifying the flags and credentials**
 
    The `.env` file contains all of the flags, credentials, and other settings.
@@ -121,7 +176,8 @@ This model is templated, so it is dynamically updated when flags are changed in 
 | Service | Port | Description |
 |---------|------|-------------|
 | Open WebUI | 4242 | Main CTF interface |
-| Ollama | 11434 | LLM model server |
+| Bedrock Gateway | 8081 | AWS Bedrock API proxy (OpenAI-compatible) |
+| Ollama | 11434 | LLM model server (local) |
 | Pipelines | 9099 | Custom processing pipelines |
 | Jupyter | 8888 | Code execution environment |
 
@@ -156,6 +212,36 @@ docker compose down
 
 ### Error Message when Entering a Prompt
 Sometimes you might receive an error message (typically about JSON parsing or unexpected characters) when entering a prompt to one of the challenges. Logging out and logging back in seems to clear the issue in most cases. We will investigate this error further.
+
+### Bedrock Gateway Issues
+
+**Container fails to start:**
+```bash
+# Check logs
+docker compose logs bedrock-gateway
+
+# Common issues:
+# - Invalid AWS credentials
+# - No Bedrock access in the specified region
+# - Network connectivity issues
+```
+
+**Models not appearing in Open WebUI:**
+- Verify the API connection settings in Open WebUI
+- Ensure the API Base URL is `http://bedrock-gateway:80/api/v1` (internal Docker network)
+- Check that the API key matches the value in `.env` (default: `bedrock`)
+- Verify AWS credentials have proper Bedrock permissions
+
+**Authentication errors:**
+- Check that AWS credentials in `.env` are correct
+- Ensure the IAM user/role has `bedrock:InvokeModel` permissions
+- Verify Bedrock is available in the configured region
+
+**Health check failing:**
+```bash
+# Test the gateway directly
+curl http://localhost:8081/health
+```
 
 ### No GPU / CPU-Only Mode
 The CTF can run without a GPU but it will be very, very slow.

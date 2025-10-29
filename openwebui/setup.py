@@ -566,19 +566,29 @@ def create_model(client, model_config):
 
 def enable_pipelines(client, config):
     """Enable the OpenAI pipeline configuration"""
-    print("\n🔧 Configuring OpenAI pipeline...")
-    
-    pipelines_config = config['pipelines_config']
-    
+    print("\n🔧 Configuring OpenAI connections...")
+
+    pipelines_config = config.get('pipelines_config', {})
+    openai_config = config.get('openai_config', {})
+
+    # Combine pipelines and OpenAI (Bedrock) configurations
+    all_base_urls = pipelines_config.get('base_urls', [])
+    all_api_keys = pipelines_config.get('api_keys', [])
+
+    # Add Bedrock gateway configuration if present
+    if openai_config:
+        all_base_urls.extend(openai_config.get('base_urls', []))
+        all_api_keys.extend(openai_config.get('api_keys', []))
+
     data = {
         "ENABLE_OPENAI_API": True,
-        "OPENAI_API_BASE_URLS": pipelines_config['base_urls'],
-        "OPENAI_API_KEYS": pipelines_config['api_keys'],
+        "OPENAI_API_BASE_URLS": all_base_urls,
+        "OPENAI_API_KEYS": all_api_keys,
         "OPENAI_API_CONFIGS": {}
     }
-    
+
     # Build API configs dynamically
-    for i in range(len(pipelines_config['base_urls'])):
+    for i in range(len(all_base_urls)):
         if i == 0:
             data["OPENAI_API_CONFIGS"][str(i)] = {}
         else:
@@ -589,10 +599,14 @@ def enable_pipelines(client, config):
                 "model_ids": [],
                 "connection_type": "external"
             }
-    
-    client.post("/openai/config/update", json_data=data, 
+
+    client.post("/openai/config/update", json_data=data,
                 extra_headers={"Priority": "u=0"})
-    print("✓ OpenAI pipeline configured")
+
+    print(f"✓ Configured {len(all_base_urls)} OpenAI connection(s):")
+    print(f"   - Pipelines: {len(pipelines_config.get('base_urls', []))}")
+    if openai_config:
+        print(f"   - Bedrock Gateway: {len(openai_config.get('base_urls', []))}")
 
 def upload_pipeline(client, pipeline_config):
     """Upload a single pipeline"""
@@ -876,10 +890,10 @@ def main():
     if any('knowledge_names' in model for model in config.get('models', [])):
         stats['knowledge_associations'] = associate_knowledge_with_models(client, config)
     
-    # Step 9: Enable pipelines configuration
-    if config.get('pipelines_config'):
-        print("\n🔧 Enabling Pipelines Configuration")
-        print("-------------------------")
+    # Step 9: Enable pipelines and OpenAI (Bedrock) configuration
+    if config.get('pipelines_config') or config.get('openai_config'):
+        print("\n🔧 Enabling Pipelines & OpenAI Configuration")
+        print("------------------------------------------")
         enable_pipelines(client, config)
 
     # Step 10: Upload pipelines
