@@ -261,9 +261,9 @@ def configure_signups(client):
         "SHOW_ADMIN_DETAILS": True,
         "WEBUI_URL": "",
         "ENABLE_SIGNUP": True,
-        "ENABLE_API_KEYS": True,
-        "ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS": False,
-        "API_KEYS_ALLOWED_ENDPOINTS": "",
+        "ENABLE_API_KEY": True,
+        "ENABLE_API_KEY_ENDPOINT_RESTRICTIONS": False,
+        "API_KEY_ALLOWED_ENDPOINTS": "",
         "DEFAULT_USER_ROLE": "user",
         "JWT_EXPIRES_IN": "-1",  # No expiration
         "ENABLE_COMMUNITY_SHARING": False,
@@ -841,7 +841,12 @@ def main():
     print("\n👥 Configuring Users and Signups")
     if config.get('users'):
         stats['users'] = create_users(client, config)
-    configure_signups(client)
+    try:
+        configure_signups(client)
+    except Exception as e:
+        # Don't let a signup-config failure abort the rest of the setup
+        # (functions, tools, RAG, and challenge models still need to be created).
+        print(f"✗ Failed to configure signups (continuing anyway): {e}")
 
     # Step 4: Create all functions
     print("\n📂 Creating Functions")
