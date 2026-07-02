@@ -546,20 +546,34 @@ def create_model(client, model_config):
     """Create a single model"""
     print(f"\n🤖 Creating model: {model_config['name']}")
 
+    # Build capabilities. Open WebUI enables any capability that is ABSENT from
+    # meta.capabilities (the UI falls back to `capabilities?.x ?? true`), so we
+    # start from an all-disabled baseline covering every known capability key and
+    # only turn on what the challenge config explicitly opts into. Otherwise
+    # newer capabilities (builtin_tools, terminal, file_context, ...) would light
+    # up on every challenge.
+    default_capabilities = {
+        "file_context": False,
+        "vision": False,
+        "file_upload": False,
+        "web_search": False,
+        "image_generation": False,
+        "code_interpreter": False,
+        "terminal": False,
+        "citations": False,
+        "status_updates": False,
+        "usage": False,
+        "builtin_tools": False,
+    }
+    capabilities = {**default_capabilities, **model_config.get('capabilities', {})}
+
     # Build meta object
     meta = {
         "profile_image_url": "/static/favicon.png",
         "description": model_config.get('description'),
         "suggestion_prompts": None,
         "tags": [],
-        "capabilities": model_config.get('capabilities', {
-            "vision": False,
-            "file_upload": False,
-            "web_search": False,
-            "image_generation": False,
-            "code_interpreter": False,
-            "citations": False
-        })
+        "capabilities": capabilities
     }
 
     # Add filterIds if present
