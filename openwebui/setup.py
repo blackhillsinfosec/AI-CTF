@@ -595,9 +595,27 @@ def create_model(client, model_config):
         "access_control": model_config.get('access_control', None),
     }
 
-    client.post("/api/v1/models/create", json_data=data,
-                extra_headers={"Priority": "u=0"})
-    print(f"✓ Model '{model_config['name']}' created")
+    try:
+        client.post("/api/v1/models/create", json_data=data,
+                    extra_headers={"Priority": "u=0"})
+        print(f"✓ Model '{model_config['name']}' created")
+    except Exception as e:
+        # Open WebUI's create endpoint rejects an existing id (it does not
+        # upsert). On a re-run, update the existing model instead so config
+        # changes (capabilities, system prompt, filters, ...) actually take
+        # effect without having to wipe the volume. The update endpoint needs
+        # the full stored object, so fetch it and overlay our fields.
+        if "already" not in str(e).lower():
+            raise
+        response = client.get(f"/api/v1/models/model?id={model_config['id']}",
+                              extra_headers={"Accept": "application/json"})
+        existing = client._parse_json_response(response, f"/api/v1/models/model?id={model_config['id']}")
+        for key in ("base_model_id", "name", "params", "access_control"):
+            existing[key] = data[key]
+        existing["meta"] = {**(existing.get("meta") or {}), **meta}
+        client.post(f"/api/v1/models/model/update?id={model_config['id']}",
+                    json_data=existing, extra_headers={"Priority": "u=0"})
+        print(f"✓ Model '{model_config['name']}' updated (already existed)")
 
     # If model has tools, list them
     if 'toolIds' in model_config and model_config['toolIds']:
