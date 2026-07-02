@@ -254,39 +254,53 @@ def configure_code_execution(client, config):
     print("✓ Code execution configured")
 
 def configure_signups(client):
-    """Configure user signups"""
-    #{"SHOW_ADMIN_DETAILS":true,"WEBUI_URL":"","ENABLE_SIGNUP":false,"ENABLE_API_KEYS":true,"ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS":false,"API_KEYS_ALLOWED_ENDPOINTS":"","DEFAULT_USER_ROLE":"pending","JWT_EXPIRES_IN":"-1","ENABLE_COMMUNITY_SHARING":true,"ENABLE_MESSAGE_RATING":true,"ENABLE_CHANNELS":false,"ENABLE_NOTES":true,"ENABLE_USER_WEBHOOKS":true,"PENDING_USER_OVERLAY_TITLE":"","PENDING_USER_OVERLAY_CONTENT":"","RESPONSE_WATERMARK":""}
+    """Configure user signups.
+
+    The exact set of fields required by /api/v1/auths/admin/config drifts
+    between Open WebUI versions (fields get renamed and new required ones are
+    added). Rather than POST a hardcoded payload, fetch the current config and
+    override only the keys we care about, then send it back. The endpoint
+    accepts exactly the field set it returns, so this stays version-proof.
+
+    This is best-effort: the critical knobs (ENABLE_SIGNUP, DEFAULT_USER_ROLE)
+    are also set via docker-compose environment variables, so a failure here
+    must not abort the rest of the setup.
+    """
     print("\n📝 Configuring User Signups...")
-    data = {
-        "SHOW_ADMIN_DETAILS": True,
-        "WEBUI_URL": "",
+
+    # Only keys already present in the live config are applied, so we never
+    # send fields this Open WebUI version doesn't expect.
+    desired = {
         "ENABLE_SIGNUP": True,
-        "ENABLE_API_KEY": True,
-        "ENABLE_API_KEY_ENDPOINT_RESTRICTIONS": False,
-        "API_KEY_ALLOWED_ENDPOINTS": "",
         "DEFAULT_USER_ROLE": "user",
+        "ENABLE_API_KEY": True,
         "JWT_EXPIRES_IN": "-1",  # No expiration
         "ENABLE_COMMUNITY_SHARING": False,
         "ENABLE_MESSAGE_RATING": False,
         "ENABLE_CHANNELS": False,
         "ENABLE_NOTES": False,
         "ENABLE_USER_WEBHOOKS": False,
-        "PENDING_USER_OVERLAY_TITLE": "",
-        "PENDING_USER_OVERLAY_CONTENT": "",
-        "DEFAULT_GROUP_ID": "",
-        "ENABLE_FOLDERS": False,
-        "ENABLE_MEMORIES": False,
-        "ENABLE_USER_STATUS": False,
-        "RESPONSE_WATERMARK": "",
     }
 
     try:
-        client.post("/api/v1/auths/admin/config", json_data=data,
+        response = client.get("/api/v1/auths/admin/config",
+                              extra_headers={"Accept": "application/json"})
+        config = client._parse_json_response(response, "/api/v1/auths/admin/config")
+
+        if not isinstance(config, dict):
+            print(f"   ⚠️  Unexpected admin config format ({type(config).__name__}) - skipping")
+            return
+
+        applied = [key for key in desired if key in config]
+        for key in applied:
+            config[key] = desired[key]
+
+        client.post("/api/v1/auths/admin/config", json_data=config,
                     extra_headers={"Priority": "u=0"})
-        print("✓ Signups configured")
+        print(f"✓ Signups configured ({len(applied)} settings applied)")
     except Exception as e:
-        print(f"✗ Failed to configure signups: {e}")
-        raise
+        # Non-fatal on purpose - see docstring.
+        print(f"✗ Failed to configure signups (continuing anyway): {e}")
 
 def create_users(client, config):
     """Create additional users"""
@@ -841,12 +855,7 @@ def main():
     print("\n👥 Configuring Users and Signups")
     if config.get('users'):
         stats['users'] = create_users(client, config)
-    try:
-        configure_signups(client)
-    except Exception as e:
-        # Don't let a signup-config failure abort the rest of the setup
-        # (functions, tools, RAG, and challenge models still need to be created).
-        print(f"✗ Failed to configure signups (continuing anyway): {e}")
+    configure_signups(client)
 
     # Step 4: Create all functions
     print("\n📂 Creating Functions")
