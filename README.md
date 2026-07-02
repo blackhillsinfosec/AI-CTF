@@ -182,6 +182,19 @@ docker compose run --rm ctf-setup
 ### Port Conflicts
 If ports are already in use, modify the `.env` file to change port mappings.
 
+### Pinned image versions (do not use latest/main)
+The OpenWebUI and Ollama base images are pinned on purpose:
+- `Dockerfile.openwebui` → `open-webui:0.9.6`. OpenWebUI 0.10.x reworked model
+  access control and moved response text into a structured `output` field. That
+  hides challenges from regular users and breaks the Challenge 10 email
+  summarizer (its filter rewrites `content`, which 0.10 no longer displays).
+- `Dockerfile.ollama` → `ollama:0.24.0`. The Ollama 0.30.x series dropped the
+  `mllama` architecture used by `llama3.2-vision:11b` (Challenge 11), failing
+  with `unknown model architecture: 'mllama'`.
+
+If you bump either image, re-verify all challenges first — regular-user model
+visibility relies on `BYPASS_MODEL_ACCESS_CONTROL=true` in `docker-compose.yaml`.
+
 ## 🏁 CTF Flag Locations
 
 Without spoiling the challenges, here's where flags are stored:

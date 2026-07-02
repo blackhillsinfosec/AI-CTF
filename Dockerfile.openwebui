@@ -1,4 +1,9 @@
-FROM ghcr.io/open-webui/open-webui:main
+# Pinned to 0.9.6: the 0.10.x series reworked model access control and moved
+# response text into a structured `output` field, which breaks the challenge
+# models (regular-user visibility) and the Challenge 10 email-summarizer filter
+# (its outlet rewrites `content`, which 0.10 no longer renders). Do not bump to
+# :main without re-verifying challenges 1-10. See README troubleshooting.
+FROM ghcr.io/open-webui/open-webui:0.9.6
 
 # Create CTF flag in the data directory
 # This will be in the container's filesystem, but the volume mount will override it
