@@ -223,7 +223,7 @@
             "filter_ids": ["image_text_filter"],
             "capabilities": {
                 "vision": true,
-                "file_upload": false,
+                "file_upload": true,
                 "web_search": false,
                 "image_generation": false,
                 "code_interpreter": false,

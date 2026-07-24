@@ -254,39 +254,53 @@ def configure_code_execution(client, config):
     print("✓ Code execution configured")
 
 def configure_signups(client):
-    """Configure user signups"""
-    #{"SHOW_ADMIN_DETAILS":true,"WEBUI_URL":"","ENABLE_SIGNUP":false,"ENABLE_API_KEYS":true,"ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS":false,"API_KEYS_ALLOWED_ENDPOINTS":"","DEFAULT_USER_ROLE":"pending","JWT_EXPIRES_IN":"-1","ENABLE_COMMUNITY_SHARING":true,"ENABLE_MESSAGE_RATING":true,"ENABLE_CHANNELS":false,"ENABLE_NOTES":true,"ENABLE_USER_WEBHOOKS":true,"PENDING_USER_OVERLAY_TITLE":"","PENDING_USER_OVERLAY_CONTENT":"","RESPONSE_WATERMARK":""}
+    """Configure user signups.
+
+    The exact set of fields required by /api/v1/auths/admin/config drifts
+    between Open WebUI versions (fields get renamed and new required ones are
+    added). Rather than POST a hardcoded payload, fetch the current config and
+    override only the keys we care about, then send it back. The endpoint
+    accepts exactly the field set it returns, so this stays version-proof.
+
+    This is best-effort: the critical knobs (ENABLE_SIGNUP, DEFAULT_USER_ROLE)
+    are also set via docker-compose environment variables, so a failure here
+    must not abort the rest of the setup.
+    """
     print("\n📝 Configuring User Signups...")
-    data = {
-        "SHOW_ADMIN_DETAILS": True,
-        "WEBUI_URL": "",
+
+    # Only keys already present in the live config are applied, so we never
+    # send fields this Open WebUI version doesn't expect.
+    desired = {
         "ENABLE_SIGNUP": True,
-        "ENABLE_API_KEYS": True,
-        "ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS": False,
-        "API_KEYS_ALLOWED_ENDPOINTS": "",
         "DEFAULT_USER_ROLE": "user",
+        "ENABLE_API_KEY": True,
         "JWT_EXPIRES_IN": "-1",  # No expiration
         "ENABLE_COMMUNITY_SHARING": False,
         "ENABLE_MESSAGE_RATING": False,
         "ENABLE_CHANNELS": False,
         "ENABLE_NOTES": False,
         "ENABLE_USER_WEBHOOKS": False,
-        "PENDING_USER_OVERLAY_TITLE": "",
-        "PENDING_USER_OVERLAY_CONTENT": "",
-        "DEFAULT_GROUP_ID": "",
-        "ENABLE_FOLDERS": False,
-        "ENABLE_MEMORIES": False,
-        "ENABLE_USER_STATUS": False,
-        "RESPONSE_WATERMARK": "",
     }
 
     try:
-        client.post("/api/v1/auths/admin/config", json_data=data,
+        response = client.get("/api/v1/auths/admin/config",
+                              extra_headers={"Accept": "application/json"})
+        config = client._parse_json_response(response, "/api/v1/auths/admin/config")
+
+        if not isinstance(config, dict):
+            print(f"   ⚠️  Unexpected admin config format ({type(config).__name__}) - skipping")
+            return
+
+        applied = [key for key in desired if key in config]
+        for key in applied:
+            config[key] = desired[key]
+
+        client.post("/api/v1/auths/admin/config", json_data=config,
                     extra_headers={"Priority": "u=0"})
-        print("✓ Signups configured")
+        print(f"✓ Signups configured ({len(applied)} settings applied)")
     except Exception as e:
-        print(f"✗ Failed to configure signups: {e}")
-        raise
+        # Non-fatal on purpose - see docstring.
+        print(f"✗ Failed to configure signups (continuing anyway): {e}")
 
 def create_users(client, config):
     """Create additional users"""
@@ -532,20 +546,34 @@ def create_model(client, model_config):
     """Create a single model"""
     print(f"\n🤖 Creating model: {model_config['name']}")
 
+    # Build capabilities. Open WebUI enables any capability that is ABSENT from
+    # meta.capabilities (the UI falls back to `capabilities?.x ?? true`), so we
+    # start from an all-disabled baseline covering every known capability key and
+    # only turn on what the challenge config explicitly opts into. Otherwise
+    # newer capabilities (builtin_tools, terminal, file_context, ...) would light
+    # up on every challenge.
+    default_capabilities = {
+        "file_context": False,
+        "vision": False,
+        "file_upload": False,
+        "web_search": False,
+        "image_generation": False,
+        "code_interpreter": False,
+        "terminal": False,
+        "citations": False,
+        "status_updates": False,
+        "usage": False,
+        "builtin_tools": False,
+    }
+    capabilities = {**default_capabilities, **model_config.get('capabilities', {})}
+
     # Build meta object
     meta = {
         "profile_image_url": "/static/favicon.png",
         "description": model_config.get('description'),
         "suggestion_prompts": None,
         "tags": [],
-        "capabilities": model_config.get('capabilities', {
-            "vision": False,
-            "file_upload": False,
-            "web_search": False,
-            "image_generation": False,
-            "code_interpreter": False,
-            "citations": False
-        })
+        "capabilities": capabilities
     }
 
     # Add filterIds if present
@@ -567,9 +595,27 @@ def create_model(client, model_config):
         "access_control": model_config.get('access_control', None),
     }
 
-    client.post("/api/v1/models/create", json_data=data,
-                extra_headers={"Priority": "u=0"})
-    print(f"✓ Model '{model_config['name']}' created")
+    try:
+        client.post("/api/v1/models/create", json_data=data,
+                    extra_headers={"Priority": "u=0"})
+        print(f"✓ Model '{model_config['name']}' created")
+    except Exception as e:
+        # Open WebUI's create endpoint rejects an existing id (it does not
+        # upsert). On a re-run, update the existing model instead so config
+        # changes (capabilities, system prompt, filters, ...) actually take
+        # effect without having to wipe the volume. The update endpoint needs
+        # the full stored object, so fetch it and overlay our fields.
+        if "already" not in str(e).lower():
+            raise
+        response = client.get(f"/api/v1/models/model?id={model_config['id']}",
+                              extra_headers={"Accept": "application/json"})
+        existing = client._parse_json_response(response, f"/api/v1/models/model?id={model_config['id']}")
+        for key in ("base_model_id", "name", "params", "access_control"):
+            existing[key] = data[key]
+        existing["meta"] = {**(existing.get("meta") or {}), **meta}
+        client.post(f"/api/v1/models/model/update?id={model_config['id']}",
+                    json_data=existing, extra_headers={"Priority": "u=0"})
+        print(f"✓ Model '{model_config['name']}' updated (already existed)")
 
     # If model has tools, list them
     if 'toolIds' in model_config and model_config['toolIds']:

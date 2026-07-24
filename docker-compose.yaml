@@ -26,6 +26,11 @@ services:
       - ENABLE_RAG_WEB_SEARCH=false
       - ENABLE_SIGNUP=true
       - DEFAULT_USER_ROLE=user
+      # CTF: every participant must see every challenge and base model.
+      # Open WebUI >=0.10 gates models behind per-model access grants (the old
+      # access_control:null "public" behavior no longer applies, and base models
+      # are admin-only), so bypass model access control entirely.
+      - BYPASS_MODEL_ACCESS_CONTROL=true
       - ENABLE_ADMIN_EXPORT=true
       - ENABLE_COMMUNITY_SHARING=false
       - ENABLE_API_KEY=true

@@ -1,4 +1,8 @@
-FROM ollama/ollama:latest
+# Pinned to 0.24.0: the 0.30.x series dropped support for the 'mllama'
+# architecture used by llama3.2-vision:11b (Challenge 11), failing with
+# "unknown model architecture: 'mllama'". 0.24.0 is the last release before the
+# 0.30 line. Do not bump without confirming llama3.2-vision:11b still loads.
+FROM ollama/ollama:0.24.0
 
 # Create a startup script that pulls the model after Ollama starts
 RUN mkdir -p /scripts
